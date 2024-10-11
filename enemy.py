@@ -35,5 +35,3 @@ class RestlessSpirit(Enemy):
 class GuardianDaemon(Enemy):
     def __init__(self):
         super().__init__("Guardian Daemon", 100, 20)
-
-

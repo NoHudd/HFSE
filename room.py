@@ -1,14 +1,16 @@
 # This file contain the Room class and functions to create and manage rooms in the game.
 from item import *
 from enemy import *
+from npc import *
 
 class Room:
-    def __init__(self, name, description, exits, items=None, enemies=None):
+    def __init__(self, name, description, exits, items=None, enemies=None, npcs=None):
         self.name = name
         self.description = description
         self.exits = exits  # Dictionary: {"direction": connected_room_name}
         self.items = items or []  # List of items in the room
-        self.enemies = enemies or []  # List of enemies in the room
+        self.enemies = enemies or []
+        self.npcs = npcs or [] 
 
     def describe(self):
         print(f"\n{self.name}")
@@ -135,7 +137,8 @@ corrupted_entryway = Room(
     description="A dark, glitchy hallway. The air is thick, and occasional bursts of static ripple across the floor. A corrupted presence seems to be watching you.",
     exits= {"north": "Distorted Chamber"},
     items=health_potion,
-    enemies=GlitchEntity()
+    enemies=GlitchEntity(),
+    npcs=[lost_user_lila]
 )
 all_rooms["Corrupted Entryway"] = corrupted_entryway
 
@@ -154,7 +157,8 @@ distorted_chamber = Room(
     description="This chamber appears warped, with reality shifting in and out of focus. The walls pulse with eerie light, and something ancient resides here.",
     exits={"south": "Corrupted Entryway", "east": "Twisted Passage"},
     items={ancient_tome},
-    enemies=[GuardianDaemon()]
+    enemies=[GuardianDaemon()],
+    npcs=[ghostly_admin_marcus]
 )
 all_rooms["Distorted Chamber"] = distorted_chamber
 

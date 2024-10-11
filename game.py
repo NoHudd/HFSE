@@ -137,8 +137,24 @@ def main():
                     current_room.items.remove(found_item)
                     print(f"You picked up {found_item.name}!")
                 else:
-                    print(f"There is no {item.name} here.")
-    
+                    print(f"There is no {item.name} here.") 
+                    
+        elif action.startswith("talk to "):
+            npc_name = action.split("talk to ")[1].strip()
+            found_npc = None
+            for npc in current_room.npcs:
+                if npc.name.lower() == npc_name.lower():
+                    found_npc = npc
+                    break
+            if found_npc:
+                found_npc.talk()
+                quest = found_npc.give_quest()
+                if quest:
+                    # Store or track the quest for the player
+                    player_character.active_quests.append(quest)
+            else:
+                print(f"There is no one neame {npc_name} here.")
+
         elif action == "look":
             # Describe current room
             current_room.describe()

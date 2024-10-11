@@ -1,4 +1,5 @@
 import json 
+from player import Player
 
 def save_game(player, current_room):
     """Saves the game state to a file."""
@@ -47,3 +48,8 @@ def load_game():
     except Exception as e:
         print(f"Error loading game: {e}")
         return None, None
+
+def get_room_by_name(room_name):
+    # Ensure 'all_rooms' is accessible
+    global all_rooms
+    return all_rooms.get(room_name, None)
