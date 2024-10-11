@@ -14,7 +14,7 @@ class Player:
         print("Inventory:", ", ".join([item.name for item in self.inventory]) or "Empty")   
 
     def attack(self, target):
-        damage = self.strength  # Basic attack using strength for now
+        damage = self.strength
         target.health -= damage
         print(f"{self.name} attacks {target.name} for {damage} damage! HP: {target.health}") # Display the attack and target's Health
 

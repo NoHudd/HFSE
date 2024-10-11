@@ -1,4 +1,3 @@
-# This file contain the Room class and functions to create and manage rooms in the game.
 from item import *
 from enemy import *
 from npc import *
@@ -7,8 +6,8 @@ class Room:
     def __init__(self, name, description, exits, items=None, enemies=None, npcs=None):
         self.name = name
         self.description = description
-        self.exits = exits  # Dictionary: {"direction": connected_room_name}
-        self.items = items or []  # List of items in the room
+        self.exits = exits  
+        self.items = items or []  
         self.enemies = enemies or []
         self.npcs = npcs or [] 
 
@@ -22,26 +21,25 @@ class Room:
             print("Exits:", ", ".join(self.exits.keys()))
 
         if self.items:
-            print("Items:", ", ".join([item.name for item in self.items])) # Extract item names before joining
+            print("Items:", ", ".join([item.name for item in self.items])) 
 
         if self.enemies:
-            print("Enemies:", ", ".join([enemy.name for enemy in self.enemies]))  # Assuming enemies have a 'name' attribute
+            print("Enemies:", ", ".join([enemy.name for enemy in self.enemies]))  
 
 
-# Dictionary to store all rooms for easy access by name
 all_rooms = {}
 
 def get_starting_room():
-    # Define your starting room (closet)
+    
     closet = Room("Closet", "A dark and cramped closet.", {"out": "Bedroom"}, items=[flashlight])
     all_rooms["Closet"] = closet 
     return closet
 
 def get_room_by_name(name):
     """Retrieves a room object by its name."""
-    return all_rooms.get(name)  # Returns the room or None if not found
+    return all_rooms.get(name)  
 
-# Define other rooms here, similar to the closet example
+
 bedroom = Room(
     name="Bedroom", 
     description="A dimly lit bedroom with an unsettling feeling.", 
@@ -167,7 +165,8 @@ twisted_passage = Room(
     description="A narrow passage that bends in impossible ways. You feel time itself is moving strangely here. Shadows move with a life of their own.",
     exits={"west": "Distorted Chamber", "north": "Anomaly Core"},
     items=[mana_crystal],
-    enemies=[RestlessSpirit()]
+    enemies=[RestlessSpirit()],
+    npcs=[echo_leader_evelyn]
 )
 all_rooms["Twisted Passage"] = twisted_passage
 

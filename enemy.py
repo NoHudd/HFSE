@@ -1,5 +1,4 @@
 # Description: This file contain the Enemy class and its attributes and methods. This class is used to create the enemy object in the game.
-
 class Enemy:
     def __init__(self, name, health, attack_power):
         self.name = name
