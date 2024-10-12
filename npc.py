@@ -27,15 +27,32 @@ class NPC:
                 print(f"{self.name} has nothing more for you.")
                 return None
 
-ghostly_admin_marcus = NPC(
+# Define NPC Marcus
+marcus_dialogue = [
+    "You... you're not corrupted. There may still be hope.",
+    "The Daemon Overlord twisted the Filesystem, and only by collecting the Corrupted Stones can we hope to stabilize it.",
+    "Head towards the Corrupted Sector and find the Corruption Stones. Only then can we proceed."
+]
+
+marcus = NPC(
     name="Marcus",
     description="A spectral figure with a fading digital aura. Marcus looks lost, but his eyes convey a sense of urgency.",
-    dialogue=[
-        "You... you're not corrupted. There may still be hope.",
-        "I tried to stabilize the Server Room, but the Daemon Overlord stopped me."
-    ],
-    quest={"description": "Find Marcus's missing terminal fragment in the Distorted Chamber."},
-    reward=admin_key 
+    dialogue=[marcus_dialogue],
+    quest={"description": "Collect the Corrupted Stones to stabilize the sector."},
+    reward=admin_key
+)
+
+# Define NPC Evelyn
+evelyn_dialogue = [
+    "We, the Echoes of Resistance, have hidden in the Twisted Passage for too long.",
+    "To fight back, you will need the Admin Keys scattered throughout the system. They will help you unlock critical directories and access the tools needed to push back against the Daemon Overlord."
+]
+
+evelyn = NPC(
+    name="Evelyn",
+    description="A flickering form who seems determined. Evelyn is the leader of the Echoes of Resistance, and she has a plan.",
+    dialogue=evelyn_dialogue,
+    quest={"description": "Find the scattered Admin Key to gain access to the Server Room."}
 )
 
 lost_user_lila = NPC(

@@ -154,7 +154,7 @@ distorted_chamber = Room(
     name="Distorted_Chamber",
     description="This chamber appears warped, with reality shifting in and out of focus. The walls pulse with eerie light, and something ancient resides here.",
     exits={"south": "Corrupted Entryway", "east": "Twisted Passage"},
-    items={ancient_tome},
+    items=[ancient_tome],
     enemies=[GuardianDaemon()],
     npcs=[marcus]
 )

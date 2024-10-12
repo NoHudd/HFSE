@@ -10,8 +10,23 @@ class Item:
         self.strength_boost = strength_boost
         self.mana_boost = mana_boost
         self.quest_item = quest_item
-        self.consumable = consumable  # Add the consumable parameter here
+        self.consumable = consumable
         self.other_effect = other_effect
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "usable_in_combat": self.usable_in_combat,
+            "damage": self.damage,
+            "heal": self.heal,
+            "key_for": self.key_for,
+            "strength_boost": self.strength_boost,
+            "mana_boost": self.mana_boost,
+            "quest_item": self.quest_item,
+            "consumable": self.consumable,
+            "other_effect": self.other_effect
+        }
      
     def use(self):
         if self.name == "Computer Manual":
@@ -111,10 +126,10 @@ arcane_blade = Item(
 admin_key = Item(
     name="Admin Key",
     description="A master key with administrative privileges. It can be used to unlock restricted rooms and bypass security protocols.",
-    key_for="Root Directory"  # Example: Unlocks a room named "Root Directory"
+    key_for="Root Directory"  
 )
 broken_computer_part = Item(
     name="Broken Computer Part",
     description="A damaged piece of hardware. It might be possible to repair or use it as a part of something larger.",
-    quest_item=True  # Used as part of a quest or puzzle
+    quest_item=True  
 )
