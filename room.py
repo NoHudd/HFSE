@@ -156,7 +156,7 @@ distorted_chamber = Room(
     exits={"south": "Corrupted Entryway", "east": "Twisted Passage"},
     items={ancient_tome},
     enemies=[GuardianDaemon()],
-    npcs=[ghostly_admin_marcus]
+    npcs=[marcus]
 )
 all_rooms["Distorted Chamber"] = distorted_chamber
 
@@ -166,7 +166,7 @@ twisted_passage = Room(
     exits={"west": "Distorted Chamber", "north": "Anomaly Core"},
     items=[mana_crystal],
     enemies=[RestlessSpirit()],
-    npcs=[echo_leader_evelyn]
+    npcs=[evelyn]
 )
 all_rooms["Twisted Passage"] = twisted_passage
 
