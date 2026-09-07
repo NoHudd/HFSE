@@ -24,10 +24,14 @@ dialogue:
   on_defeat:
     - "You... have proven... worthy. I was never your enemy. I was... your test."
     - "Sudo privileges... granted. You are... the superuser now."
-drops: []
+# The Sudo Trial's reward. This is a `drops` entry rather than the old
+# `on_defeat.grants` / `victory_rewards` fields, which nothing in the engine ever
+# read — the badge was unobtainable and /dev stayed sealed forever.
+drops:
+  - item: sudo_privileges_badge
+    chance: 100
 on_defeat:
   message: The Shadow Process dissolves into data fragments as the mirror shatters. The Sudo Privileges Badge materializes before you.
-  grants: sudo_privileges_badge
   story_flag: sudo_trial_complete
 special_mechanics:
   mirrors_player_stats: true

@@ -15,7 +15,6 @@ from src.commands.display import (
     InventoryCommand,
     JournalCommand,
     KeysCommand,
-    MapCommand,
 )
 from src.commands.info import HelpCommand, PwdCommand, ShortcutsCommand
 from src.commands.navigation import CdCommand, LsCommand
@@ -26,6 +25,13 @@ from src.commands.items import (
     ExamineCommand,
     TakeCommand,
     TalkCommand,
+)
+from src.commands.shell import (
+    ClearCommand,
+    EchoCommand,
+    ManCommand,
+    TreeCommand,
+    WhoamiCommand,
 )
 from src.commands.system import QuitCommand, SaveCommand
 
@@ -38,7 +44,11 @@ MIGRATED: tuple[type[Command], ...] = (
     JournalCommand,
     InventoryCommand,
     KeysCommand,
-    MapCommand,
+    TreeCommand,
+    ManCommand,
+    WhoamiCommand,
+    EchoCommand,
+    ClearCommand,
     FindCommand,
     PsCommand,
     SaveCommand,

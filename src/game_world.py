@@ -302,36 +302,97 @@ class GameWorld:
 
         return total_placed
 
+    def _keys_granted_by_enemies(self):
+        """Key ids obtainable as enemy drops, so they are not also scattered."""
+        granted = set()
+        for enemy in self.enemies.values():
+            drops = enemy.get("drops", []) if isinstance(enemy, dict) else (enemy.drops or [])
+            for drop in drops:
+                item_id = drop.get("item") if isinstance(drop, dict) else getattr(drop, "item", None)
+                if item_id and self._is_key(item_id):
+                    granted.add(str(item_id))
+        return granted
+
+    def _is_key(self, item_id):
+        item = self.items.get(item_id)
+        if item is None:
+            return False
+        item_type = item.get("type") if isinstance(item, dict) else item.type
+        return str(item_type).lower() == "key"
+
+    def _rooms_reachable_with(self, held_keys):
+        """Rooms a player holding held_keys could actually walk into.
+
+        Traversal needs permission on every ancestor, so a room is reachable only
+        if nothing on the way to it is locked without a held key. Hidden rooms
+        count as reachable — `ls -a` in the (reachable) parent reveals them.
+        Class-restricted rooms never count: two thirds of players cannot enter
+        them, so nothing required for progression may live there.
+        """
+        from src.room_paths import ancestors, room_at, room_path
+
+        reachable = []
+        for room_id in self.rooms:
+            target = room_path(room_id)
+            ok = True
+            for path in ancestors(target) + [target]:
+                rid = room_at(path)
+                if rid is None:
+                    continue
+                room = self.get_room(rid)
+                if getattr(room, "class_restriction", "") or "":
+                    ok = False
+                    break
+                state = self.room_states.get(rid, {})
+                if state.get("locked", False) and state.get("key_required") not in held_keys:
+                    ok = False
+                    break
+            if ok:
+                reachable.append(room_id)
+        return reachable
+
     def _place_keys(self):
-        """Scatter unplaced keys across non-locked rooms so progression items
-        spread out instead of monopolizing the random-loot pool."""
-        unplaced_keys = [
-            item_id for item_id, item_data in self.items.items()
-            if str(item_data.type).lower() == "key"
+        """Place progression keys so every run is completable.
+
+        Keys are placed in dependency order: each one lands in a room the player
+        can already reach with the keys placed before it. Reachability only ever
+        grows, so this cannot strand a key behind the door it opens — the failure
+        the old "scatter into any unlocked room" version could produce once locks
+        started carrying the difficulty ramp.
+        """
+        from_drops = self._keys_granted_by_enemies()
+        unplaced = [
+            item_id for item_id in self.items
+            if self._is_key(item_id)
             and item_id not in self.item_locations
+            and item_id not in from_drops
         ]
-        if not unplaced_keys:
+        if not unplaced:
             return
 
-        # Eligible rooms: unlocked, not home_grove (starter rooms keep their fixed items)
-        eligible_rooms = [
-            room_id for room_id in self.rooms.keys()
-            if not self.room_states.get(room_id, {}).get("locked", False)
-            and room_id != "home_grove"
-        ]
-        if not eligible_rooms:
-            return
+        rng.shuffle(unplaced)
+        held = set()
 
-        rng.shuffle(unplaced_keys)
-        rng.shuffle(eligible_rooms)
+        while unplaced:
+            spots = [
+                room_id for room_id in self._rooms_reachable_with(held)
+                if room_id != "home_grove"  # starter room keeps its authored items
+            ]
+            if not spots:
+                debug_log(f"WARNING: no reachable room left for keys {unplaced}")
+                return
 
-        # Spread keys across distinct rooms first, then double up if more keys than rooms.
-        for i, key_id in enumerate(unplaced_keys):
-            room_id = eligible_rooms[i % len(eligible_rooms)]
+            key_id = unplaced.pop(0)
+            allowed = self.get_item(key_id).get("allowed_rooms") or []
+            preferred = [r for r in spots if r in allowed] or spots
+
+            room_id = rng.choice(preferred)
             self.item_locations[key_id] = room_id
             self.item_spawn_counts[key_id] = 1
-            debug_log(f"Scattered key {key_id} into room {room_id}")
-    
+            held.add(key_id)
+            debug_log(f"Placed key {key_id} in {room_id} (reachable with {sorted(held)})")
+
+
     def _ensure_home_grove_basics(self):
         """Ensure home_grove has essential consumables for good player experience."""
         # item_locations maps item_id -> room_id, so check it correctly
@@ -447,9 +508,11 @@ class GameWorld:
         total_items_placed = 0
         
         # Create a list of rooms where items can be placed
-        eligible_rooms = [room_id for room_id in self.rooms.keys() 
-                          if not self.room_states.get(room_id, {}).get("locked", False)]
-        debug_log(f"Found {len(eligible_rooms)} eligible unlocked rooms for item placement")
+        # Locked rooms are eligible: a lock is a *when*, not a *never*. The
+        # tier-3 rooms behind keys are exactly where good loot belongs, and
+        # starving them left players unlocking a door onto an empty room.
+        eligible_rooms = list(self.rooms.keys())
+        debug_log(f"Found {len(eligible_rooms)} eligible rooms for item placement")
         
         # Place items randomly based on weighted rarity
         for _ in range(target_item_count):
@@ -516,13 +579,11 @@ class GameWorld:
             # Item has specific room restrictions
             debug_log(f"Item {item_id} has room restrictions: {allowed_rooms}")
             for room_id in allowed_rooms:
-                # Check if the room exists and is not locked
-                if room_id in self.rooms and not self.room_states.get(room_id, {}).get("locked", False):
+                if room_id in self.rooms:
                     eligible_rooms.append(room_id)
         else:
-            # No specific room restrictions, can go in any unlocked room
-            eligible_rooms = [room_id for room_id in self.rooms.keys() 
-                              if not self.room_states.get(room_id, {}).get("locked", False)]
+            # No specific room restrictions: any room, locked or not.
+            eligible_rooms = list(self.rooms.keys())
         
         # If no eligible rooms, item can't be placed
         if not eligible_rooms:
@@ -944,10 +1005,6 @@ class GameWorld:
 
     def _place_item_in_room(self, item_id, item_data, room_id, max_items_per_room=5):
         """Place a specific item in a specific room."""
-        # Check if room is locked
-        if self.room_states.get(room_id, {}).get("locked", False):
-            return False
-
         # Check item's own zone/room constraints
         if not self._item_fits_room(item_data, room_id):
             return False
@@ -1224,34 +1281,58 @@ class GameWorld:
         debug_log(f"Room {room_id} has exits: {exits}")
         return exits
     
-    def can_move_to(self, from_room, to_room):
-        """Check if player can move from one room to another"""
-        debug_log(f"Checking if player can move from {from_room} to {to_room}")
-        
-        # First check if the exit exists
-        if to_room not in self.get_exits(from_room):
-            debug_log(f"Move failed: {to_room} is not an exit from {from_room}")
-            return False, "That exit doesn't exist."
-        
-        # Check if destination is hidden
-        room_state = self.get_room_state(to_room)
-        if room_state.get("hidden", False):
-            debug_log(f"Move failed: {to_room} is hidden")
-            return False, "That path is not visible."
-        
-        # Check if destination is locked
-        if room_state.get("locked", False):
-            key_required = room_state.get("key_required")
-            if key_required:
-                debug_log(f"Move failed: {to_room} is locked and requires key: {key_required}")
-                return False, f"That room is locked. You need {key_required} to enter."
-            else:
-                debug_log(f"Move failed: {to_room} is locked")
-                return False, "That room is locked."
-                
-        debug_log(f"Move allowed: {from_room} to {to_room}")
+    def is_discovered(self, room_id):
+        """Whether a room is visible at all. Undiscovered rooms behave like paths
+        that do not exist — `ls -a` in the parent is what reveals them."""
+        return not self.get_room_state(room_id).get("hidden", False)
+
+    def check_access(self, room_id, player=None):
+        """Can the player enter room_id? Returns (allowed, denial or None).
+
+        Movement is not restricted by the exit graph — you may `cd` to any path,
+        exactly as in a real shell. What restricts you is permission, and, as on
+        a real filesystem, you need it on *every ancestor directory*, not just
+        the destination. So /usr being sealed also seals /usr/games beneath it.
+
+        A denial is a dict: {"path", "room_id", "reason", "key_required",
+        "class_restriction"}, where reason is "missing" | "locked" | "class".
+        """
+        from src.room_paths import ancestors, room_at, room_path
+
+        target_path = room_path(room_id)
+        for path in ancestors(target_path) + [target_path]:
+            rid = room_at(path)
+            if rid is None:
+                continue
+            state = self.get_room_state(rid)
+
+            if state.get("hidden", False):
+                return False, {
+                    "path": path, "room_id": rid, "reason": "missing",
+                    "key_required": None, "class_restriction": None,
+                }
+            # Class restriction is reported before the lock: a key the player can
+            # never use is not the useful half of the message.
+            room = self.get_room(rid)
+            restriction = getattr(room, "class_restriction", "") if room else ""
+            if restriction and player is not None:
+                if str(getattr(player, "player_class", "")).lower() != str(restriction).lower():
+                    return False, {
+                        "path": path, "room_id": rid, "reason": "class",
+                        "key_required": None, "class_restriction": restriction,
+                    }
+
+            if state.get("locked", False):
+                return False, {
+                    "path": path, "room_id": rid, "reason": "locked",
+                    "key_required": state.get("key_required"),
+                    "class_restriction": None,
+                }
+
+        debug_log(f"Access granted to {room_id} ({target_path})")
         return True, None
-    
+
+
     
     def discover_room(self, room_id):
         """Make a hidden room visible

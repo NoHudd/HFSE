@@ -35,6 +35,6 @@ zone: safe
 zone_level: 2
 story_location: true 
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/bin"
-aliases: ["/bin", "/bin/armory", "bin", "armory"]
+aliases: ["/bin", "bin", "armory"]

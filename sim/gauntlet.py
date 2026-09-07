@@ -41,12 +41,20 @@ def main_path_enemy_ids() -> list[str]:
     rooms = load_room_data()
     enemies = load_enemy_data()
 
-    # Main path only: skip secret, key-gated, or class-locked side content.
-    # rooms are typed Room models (from load_room_data).
+    # Main path: everything a run must actually fight through.
+    #
+    # Key-locked rooms COUNT. A lock is a pacing device, not optional content —
+    # /etc has always been chmod_key-locked yet is the only way to the boss, and
+    # since permissions replaced the exit graph as the difficulty ramp, most of
+    # the mid-and-late game sits behind a key. Excluding locked rooms measured a
+    # gauntlet no player ever plays and dropped the boss entirely.
+    #
+    # Still excluded: hidden rooms (secret detours the player may never find) and
+    # class-restricted rooms (a run must never be scored against a boss its class
+    # cannot reach). rooms are typed Room models (from load_room_data).
     main_path = {
         rid: room for rid, room in rooms.items()
         if not room.hidden
-        and not room.locked
         and not room.class_restriction
     }
     rolled = roll_room_enemies(main_path, enemies, rng)
