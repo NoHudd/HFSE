@@ -1,16 +1,28 @@
-# Live difficulty multipliers. Re-tuned 2026-07-08 after enemies began awarding their real
-# `experience` value (was a dead flat-50 default; typed-Enemy work). Real XP roughly halved
-# leveling income, so xp_gain was raised (~2x) to restore the band. Sim @60 runs/cell:
-# medium G90/W77/S95 (~87% avg), hard G65/W65/S63 (~64% avg, tight ~2pt spread), easy ~100%.
-# Hard is harder than medium via enemy_hp 1.15 (longer fights), not per-hit damage.
-# Calibrated by the sim tuner: python -m sim.tune --mode all
+# Live difficulty multipliers.
+#
+# Re-tuned 2026-09-06, after the sim gauntlet began including key-locked rooms.
+# Locks now carry the difficulty ramp, so excluding them measured a run nobody
+# plays: /etc is the only route to the boss and /boot is the boss, and both were
+# missing from the measurement. The gauntlet went from 6 enemies to 9, ending on
+# the Daemon Overlord.
+#
+# Sim @50 runs/class (python -m sim.playtest measure --mode all --class all):
+#   easy   98.0% avg   (band 90-98)
+#   medium 84.7% avg   (band 75-85)
+#   hard   54.7% avg   (band 50-70)
+#
+# Hard is harder than medium through enemy_hp 1.15 (longer fights), not per-hit
+# damage. xp_gain is high across the board because enemies award their real
+# `experience` value, which is far below the flat 50 the game once assumed.
+#
+# Calibrated by: python -m sim.tune --mode all --runs 50
 easy:
   enemy_hp: 0.85
   enemy_damage: 0.9
   xp_gain: 2.4
 medium:
   enemy_hp: 0.95
-  enemy_damage: 0.93
+  enemy_damage: 0.95
   xp_gain: 2.0
 hard:
   enemy_hp: 1.15
