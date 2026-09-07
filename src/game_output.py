@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GameOutput — the domain's output sink.
 
-Phase 2b of the rewrite (docs/REWRITE_PLAN.md): the command/combat layer no
+The command/combat layer no
 longer holds a UI reference. It writes narrative text to this sink, which
 forwards each line to a callback the engine injects (dependency inversion). The
 domain now depends on this small abstraction instead of a concrete Textual UI.

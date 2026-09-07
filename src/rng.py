@@ -4,8 +4,7 @@
 All gameplay randomness (loot placement, combat rolls, dialogue picks) goes
 through this one source so a run can be made reproducible — the simulation
 harness seeds it per run for deterministic measurements, and a future
-player-facing "enter a seed" feature is a small addition on top. See
-docs/DIFFICULTY_SIM_DESIGN.md.
+player-facing "enter a seed" feature is a small addition on top.
 
 Interactive play leaves it unseeded (system entropy), matching prior behavior.
 """

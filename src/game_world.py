@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-import random
+import logging
+
 from src import rng
-import yaml
-import os
 from utils.debug_tools import debug_log
 from src.events import event_bus, EventType
+
+logger = logging.getLogger(__name__)
 
 class GameWorld:
     """Manages the game world, including rooms, items, enemies, and NPCs"""
@@ -105,10 +106,6 @@ class GameWorld:
         """Scale enemy stats based on player class power scaling"""
         if not enemy_data or not player_class:
             return enemy_data
-        
-        # Get class scaling type
-        class_info = self.class_data.get(player_class)
-        power_scaling = class_info.power_scaling if class_info else "balanced"
         
         # Create scaled copy to avoid modifying original data
         scaled_enemy = enemy_data.copy()
@@ -235,8 +232,8 @@ class GameWorld:
             self._place_starter_weapon(player_class)
         
         if not player_class or player_class not in self.class_data:
-            debug_log(f"Invalid or missing player class, using default placement")
-            return self._place_items_default()
+            debug_log("Invalid or missing player class, using default placement")
+            return self._place_items_default(player_class)
             
         return self._place_items_class_based(player_class)
     
@@ -414,8 +411,13 @@ class GameWorld:
                 self.item_spawn_counts["health_packet"] = 1
                 debug_log("Added health_packet to home_grove as safety net")
     
-    def _place_items_default(self):
-        """Fallback to original placement algorithm."""
+    def _place_items_default(self, player_class=None):
+        """Fallback placement for an unknown/missing class.
+
+        player_class was read here but never a parameter: this path raised
+        NameError the moment it ran, which is why nobody noticed the fallback
+        was broken — reaching it needs a class outside classes.yaml.
+        """
         debug_log("Using default item placement")
         # Define rarity weights
         rarity_weights = {

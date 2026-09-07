@@ -61,7 +61,7 @@
 }
 
 /* =============================================================================
-   SCENE VIEW (replaces room/entity strips) — docs/SCENE_VIEW_SPEC.md
+   SCENE VIEW (replaces room/entity strips) — see src/ui/panels/scene_view.py
    ============================================================================= */
 
 #scene-view {

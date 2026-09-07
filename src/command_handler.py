@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-import os
 import re
-import random
 from src import rng
 import logging
 from rich.text import Text
-from src.combat import combat_system, CombatSession
+from src.combat import CombatSession
 from src.commands import build_registry
 from src.events import event_bus, EventType
-from src.game_states import GameState
-from src.state_manager import state_manager
 from src.viewmodels.view_builder import ViewBuilder
 from utils.debug_tools import debug_log
-from utils.typewriter import TypewriterPresets, create_typewriter_output_func
 from utils.particle_animation import GameOverAnimation
 
 logger = logging.getLogger(__name__)
@@ -25,7 +20,7 @@ class CommandHandler:
 
         Phase 2b: the handler no longer holds a UI reference — it writes to
         ``self.output`` (a src.game_output.GameOutput). The engine drains it and
-        forwards to the real UI. See docs/REWRITE_PLAN.md.
+        forwards to the real UI.
         """
         debug_log("Initializing CommandHandler")
         self.player = player
@@ -855,7 +850,7 @@ class CommandHandler:
                 self.player.add_status_effect(effect_id, effect_data, effect_duration)
                 self.output.write(f"[bold]── Status Effect ──[/bold]\n[magenta]You gained the {effect_name} effect for {effect_duration} turns![/magenta]")
         else:
-            self._show_error(f"[red]You don't have the ability to learn this spell.[/red]")
+            self._show_error("[red]You don't have the ability to learn this spell.[/red]")
             
     def start_combat(self, enemies_queue):
         """
@@ -1043,7 +1038,7 @@ class CommandHandler:
 
         if not enemies_queue:
             debug_log(f"ERROR: No valid enemy data found for room {current_room}")
-            self.output.write(f"[bold red]System error: Cannot load enemy data[/bold red]")
+            self.output.write("[bold red]System error: Cannot load enemy data[/bold red]")
             return
 
         # Show detection message for first enemy
@@ -1165,8 +1160,6 @@ class CommandHandler:
                 from src.save import load_most_recent_save
                 save_data = load_most_recent_save()
                 if save_data:
-                    # Import GameEngine to restart properly
-                    from src.game_engine import GameEngine
                     self.output.write("[green]Backup found! Restoring system state...[/green]")
                     self._in_game_over_mode = False
                     # Signal to restart with save data

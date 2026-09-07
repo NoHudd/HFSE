@@ -6,7 +6,7 @@ Design notes (strangler phase):
   validating the *critical* fields and every cross-file id-reference.
 - Field names are snake_case to match the current YAML exactly. camelCase is
   reserved for serialized *save* JSON (Phase 4), not content files — per
-  docs/REWRITE_PLAN.md and ~/.claude/CLAUDE.md.
+  the project's naming convention.
 - ``id`` is injected by the loader from the map key / filename stem; it is not
   present in the YAML body itself.
 """
@@ -181,7 +181,8 @@ class NPC(_Base):
     short_description: str = ""
     description: str = ""
     dialogues: list[str] = Field(default_factory=list)
-    # Story-aware dialogue (docs/NPC_DIALOGUE_SPEC.md): named banks + ordered rules.
+    # Story-aware dialogue: named banks + ordered rules resolved in
+    # src/npc_dialogue.py.
     dialogue: dict[str, object] = Field(default_factory=dict)
     dialogue_rules: list[dict[str, object]] = Field(default_factory=list)
     location: RoomId | None = None

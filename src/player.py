@@ -1,6 +1,5 @@
 from utils.debug_tools import debug_log
-from src.data_loader import load_class_data, load_weapon_data, get_abilities_for_class, load_consumable_data
-import random
+from src.data_loader import load_class_data, load_consumable_data
 
 # Armor mitigation: defense -> capped percent damage reduction.
 ARMOR_MITIGATION_CAP = 33       # max % damage reduced, so a tank can't become unkillable

@@ -21,15 +21,12 @@ from src.player import Player
 from src.command_handler import CommandHandler
 from src.game_output import GameOutput
 from src.save import save_manager
-from src.ui.ui_interface import UIProtocol, UIError, UIInitializationError
+from src.ui.ui_interface import UIProtocol, UIInitializationError
 from src.events import event_bus, EventType
 from src.game_states import GameState, DEFAULT_GAME_STATE, DEFAULT_ROOM
 from src.data_loader import load_room_data, load_enemy_data, load_npc_data
 from src.state_manager import state_manager
 from src.viewmodels.view_builder import ViewBuilder
-
-# Import debug tools
-from utils.debug_tools import debug_log
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +82,13 @@ class ImprovedGameEngine:
     def _initialize_game_components(self):
         """Initialize/reinitialize game components (reloadable)."""
         logger.info("Initializing game components")
+
+        # Drop the outgoing handler's subscriptions before letting go of it.
+        # Without this, F5 (restart) left the dead run's CommandHandler on the
+        # bus: ROOM_ENTERED then fired check_for_enemies twice (every enemy
+        # fought twice) and ENEMY_DEFEATED fired twice (loot rolled twice).
+        if getattr(self, "cmd_handler", None):
+            self.cmd_handler.cleanup_event_subscriptions()
 
         # Reset game state
         self.player: Optional[Player] = None
@@ -440,9 +444,8 @@ class ImprovedGameEngine:
             event_bus.emit_event(EventType.GAME_QUIT, {}, "ImprovedGameEngine")
         else:
             self.ui.update_output(f"[bold red]Invalid choice: {command}. Please enter 1, 2, or 3.[/bold red]\n")
-            # Re-show the title screen to help the player
-            import time
-            time.sleep(1)  # Brief pause before re-displaying
+            # Re-show the title screen to help the player. No sleep here: this
+            # runs on the UI thread, so a pause freezes the whole app.
             if hasattr(self.ui, '_display_title_screen'):
                 self.ui._display_title_screen()
             else:
@@ -471,9 +474,6 @@ class ImprovedGameEngine:
             logger.debug(f"Found {len(save_files)} save files")
             if not save_files:
                 self.ui.update_output("[bold yellow]No save files found. Starting new game instead...[/bold yellow]\n")
-                # Give user a moment to see the message
-                import time
-                time.sleep(1)
                 self._start_new_game()
                 return
             

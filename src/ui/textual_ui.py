@@ -13,17 +13,16 @@ Author: NoHudd
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Header, Footer, Static, Input, RichLog
+from textual.widgets import Footer, Static, Input
 from textual.containers import Container, VerticalScroll, Horizontal, Vertical
 from textual.reactive import var
-from textual.screen import ModalScreen
 from rich.text import Text
 
-from src.ui.ui_interface import UIProtocol, UIError, UIInitializationError, UIStateError
+from src.ui.ui_interface import UIInitializationError, UIStateError
 from src.events import event_bus, EventType
 from src.game_states import GameState, UIState
 from src.state_manager import state_manager
-from utils.typewriter import TypewriterPresets, create_typewriter_output_func, request_skip as request_typewriter_skip
+from utils.typewriter import TypewriterPresets, request_skip as request_typewriter_skip
 from config.dev_config import SKIP_INTRO
 
 from src.ui.panels.inventory_panel import InventoryPanel
@@ -39,8 +38,7 @@ from config.settings_manager import SettingsManager
 import logging
 import os
 import threading
-import time
-from typing import Dict, Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -283,10 +281,6 @@ class TextualGameUI(App):
         """Handle room entered event with enhanced theming."""
         if 'room' in event.data:
             self._room_view = event.data['room']
-            exits = self._room_view.get('exits', [])
-            enemies = self._room_view.get('enemies', [])
-            npcs = self._room_view.get('npcs', [])
-
             room_name = self._room_view.get('name', '')
             self._scene_view.show_explore(self._room_view)
 

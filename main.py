@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import sys
 import shutil
 from src.game_engine import main
 from src.ui.textual_ui import TextualGameUI  # composition root: the frontend is chosen HERE

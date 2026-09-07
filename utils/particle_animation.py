@@ -9,8 +9,7 @@ Respects DISABLE_ANIMATIONS setting from dev config.
 import time
 import random
 import math
-import threading
-from typing import Callable, List, Tuple, Optional
+from typing import Callable, List, Tuple
 from dataclasses import dataclass
 import config.dev_config as _dev_cfg
 

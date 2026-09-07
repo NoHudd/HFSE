@@ -176,7 +176,7 @@ DIALOGUE_WHEN_KEYS = {"story_flag", "not_story_flag", "has_item", "first_meeting
 def find_dialogue_problems(content: GameContent) -> list[str]:
     """Dangling dialogue-rule references: every rule bank must exist as a
     non-empty list of strings in that NPC's dialogue mapping, and every `when`
-    key must be from the known vocabulary (docs/NPC_DIALOGUE_SPEC.md)."""
+    key must be from the known vocabulary (see DIALOGUE_WHEN_KEYS below)."""
     problems: list[str] = []
     for npc_id, npc in content.npcs.items():
         rules = npc.dialogue_rules

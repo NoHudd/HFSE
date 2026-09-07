@@ -3,7 +3,6 @@ import os
 import json
 import time
 import logging
-from src.events import event_bus, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,7 @@ class SaveManager:
         # Create the full file path
         save_path = os.path.join(self.save_dir, save_name)
         
-        # Create save data structure (v2 envelope, camelCase fields).
+        # Create save data structure (versioned envelope, camelCase fields).
         save_data = {
             "version": SAVE_VERSION,
             "player": player.to_dict(),

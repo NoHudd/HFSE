@@ -6,7 +6,7 @@ AVERAGE win rate across the (now-comparable) classes lands in the target band.
 
 Output is a *proposal*: a report + data/difficulty.proposed.yaml. A human
 reviews and, if happy, copies it over data/difficulty.yaml. The tuner never
-edits the live config (see docs/DIFFICULTY_SIM_DESIGN.md).
+edits the live config.
 
     python -m sim.tune --mode all --runs 60
 """

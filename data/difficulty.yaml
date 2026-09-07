@@ -3,7 +3,7 @@
 # leveling income, so xp_gain was raised (~2x) to restore the band. Sim @60 runs/cell:
 # medium G90/W77/S95 (~87% avg), hard G65/W65/S63 (~64% avg, tight ~2pt spread), easy ~100%.
 # Hard is harder than medium via enemy_hp 1.15 (longer fights), not per-hit damage.
-# See docs/DIFFICULTY_SIM_STATUS.md.
+# Calibrated by the sim tuner: python -m sim.tune --mode all
 easy:
   enemy_hp: 0.85
   enemy_damage: 0.9

@@ -227,21 +227,13 @@ class EventBus:
                 callback_errors += 1
                 logger.error(f"Error in event callback for {event.type}: {e}")
         
-        # Record metrics if available
         total_time = time.time() - start_time
-        try:
-            # Avoid circular import by importing here
-            from utils.metrics import metrics_collector
-            metrics_collector.record_event(
-                event.type,
-                f"EventBus.emit({event.source})",
-                total_time,
-                callback_errors == 0,
-                f"{callback_errors} callback errors" if callback_errors > 0 else None
+        if total_time > 0.1:
+            logger.warning(
+                f"{event.type} took {total_time:.3f}s across {len(listeners)} listeners"
             )
-        except ImportError:
-            # Metrics not available, continue without recording
-            pass
+        if callback_errors:
+            logger.warning(f"{event.type}: {callback_errors} callback error(s)")
     
     def emit_event(self, event_type: EventType, data: Dict[str, Any] = None, source: str = "unknown") -> None:
         """Convenience method to emit an event."""
