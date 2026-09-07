@@ -12,7 +12,6 @@ This is a refactored version of the game engine with:
 
 import os
 import sys
-import yaml
 import logging
 from typing import Optional, Dict, Any
 
@@ -25,7 +24,7 @@ from src.save import save_manager
 from src.ui.ui_interface import UIProtocol, UIError, UIInitializationError
 from src.events import event_bus, EventType
 from src.game_states import GameState, DEFAULT_GAME_STATE, DEFAULT_ROOM
-from src.data_loader import load_room_data, load_enemy_data
+from src.data_loader import load_room_data, load_enemy_data, load_npc_data
 from src.state_manager import state_manager
 from src.viewmodels.view_builder import ViewBuilder
 
@@ -136,74 +135,32 @@ class ImprovedGameEngine:
 
         logger.info("Game restart complete")
 
-    def _load_game_data(self):
-        """Load all game data from YAML files."""
-        logger.info("Loading game data")
-        
-        # Load data using centralized data_loader functions
-        rooms = load_room_data()
-        enemies = load_enemy_data()
-        
-        # Load other data with existing methods
-        items = self._load_items()
-        npcs = self._load_data_from_dir('data/npcs', 'npcs')
-        
-        # Create world
-        self.world = GameWorld(rooms, items, enemies, npcs)
-        logger.info(f"Loaded {len(rooms)} rooms, {len(items)} items, {len(enemies)} enemies, {len(npcs)} NPCs")
+    def _load_content(self):
+        """Load every content collection from data/ (rooms, items, enemies, npcs)."""
+        return (
+            load_room_data(),
+            self._load_items(),
+            load_enemy_data(),
+            load_npc_data(),
+        )
 
-        # Validate cross-file references at startup
-    
+    def _load_game_data(self):
+        """Load all game data and build a freshly-initialized world."""
+        logger.info("Loading game data")
+        rooms, items, enemies, npcs = self._load_content()
+        self.world = GameWorld(rooms, items, enemies, npcs)
+        logger.info(
+            f"Loaded {len(rooms)} rooms, {len(items)} items, "
+            f"{len(enemies)} enemies, {len(npcs)} NPCs"
+        )
+
     def _load_game_data_for_load(self):
-        """Load game data when loading a saved game - skip world state initialization."""
+        """Load game data for a save game — world state comes from the save."""
         logger.info("Loading game data for save game")
-        
-        # Load data using centralized data_loader functions
-        rooms = load_room_data()
-        enemies = load_enemy_data()
-        
-        # Load other data with existing methods
-        items = self._load_items()
-        npcs = self._load_data_from_dir('data/npcs', 'npcs')
-        
-        # Create game world without initializing state (will be loaded from save)
+        rooms, items, enemies, npcs = self._load_content()
         self.world = GameWorld(rooms, items, enemies, npcs, initialize_state=False)
-        
         logger.info("Game data loaded successfully for save game")
-    
-    def _load_data_from_dir(self, directory: str, category_key: str) -> Dict[str, Any]:
-        """Generic data loader for enemies and NPCs."""
-        data_map = {}
-        
-        if not os.path.exists(directory):
-            logger.warning(f"Directory {directory} does not exist")
-            return data_map
-            
-        try:
-            for filename in os.listdir(directory):
-                if filename.endswith(('.yaml', '.yml')):
-                    filepath = os.path.join(directory, filename)
-                    with open(filepath, 'r') as file:
-                        data = yaml.safe_load(file)
-                        if data:
-                            # Check if this is a nested structure (old format) or flat structure (new format)
-                            if category_key in data:
-                                # Old nested format: enemies: { enemy_id: { ... } }
-                                for key, value in data.get(category_key, {}).items():
-                                    value['id'] = key
-                                    data_map[key] = value
-                            else:
-                                # New flat format: individual files with direct properties
-                                # Use filename (without extension) as the ID
-                                entity_id = os.path.splitext(filename)[0]
-                                data['id'] = entity_id
-                                data_map[entity_id] = data
-                                
-        except Exception as e:
-            logger.error(f"Error loading data from {directory}: {e}")
-            
-        return data_map
-    
+
     def _load_items(self) -> Dict[str, Any]:
         """Load all items as typed engine Item models (id -> model), validated at load.
 
@@ -216,9 +173,7 @@ class ImprovedGameEngine:
         logger.info(f"Total items loaded: {len(items)}")
         return items
 
-        logger.info(f"Total items loaded: {len(items)}")
-        return items
-    
+
     # Event handlers
     def _on_command_entered(self, event):
         """Handle command entered from UI."""

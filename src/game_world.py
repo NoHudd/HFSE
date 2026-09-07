@@ -1009,71 +1009,49 @@ class GameWorld:
         debug_log(f"WARNING: Attempted to unlock non-existent room {room_id}")
         return False
     
+    # ------------------------------------------------------------------
+    # Room contents.
+    #
+    # The *_locations dicts are the ONLY runtime truth. World init seeds them
+    # from each room's YAML (see _initialize_world_state), and set_state
+    # restores them from a save.
+    #
+    # These getters used to also union in the room's static YAML list "as a
+    # backup". That made defeat/pickup unrepresentable across a save: killing an
+    # enemy removed it from enemy_locations and mutated the in-memory Room model,
+    # but _load_game_data_for_load re-reads the YAML fresh, so every scripted
+    # boss came back to life on load. Do not reintroduce the fallback.
+    # ------------------------------------------------------------------
+
     def get_items_in_room(self, room_id):
-        """Get all items in a room"""
-        debug_log(f"Getting items in room {room_id}", category="world")
+        """Item ids currently on the floor of room_id."""
+        items = [
+            item_id
+            for item_id, location in self.item_locations.items()
+            if location == room_id and item_id not in self.removed_items
+        ]
+        debug_log(f"Found {len(items)} items in room {room_id}: {items}", category="world")
+        return items
 
-        # Get all items from the item_locations dictionary
-        items_from_locations = [item_id for item_id, location in self.item_locations.items() if location == room_id]
-        debug_log(f"Items from locations for {room_id}: {items_from_locations}", category="world")
-
-        # As a backup, check the room data directly (some items might not be in the tracking dict)
-        room_data = self.get_room(room_id)
-        if room_data and room_data.items:
-            items_in_room_data = room_data.items or []  # Handle None by returning empty list
-            debug_log(f"Items from room data for {room_id}: {items_in_room_data}", category="world")
-            # Combine both sources, ensuring no duplicates
-            combined_items = list(set(items_from_locations + items_in_room_data))
-
-            # Filter out permanently removed items
-            filtered_items = [item_id for item_id in combined_items if item_id not in self.removed_items]
-            if len(filtered_items) != len(combined_items):
-                removed_count = len(combined_items) - len(filtered_items)
-                debug_log(f"Filtered out {removed_count} permanently removed items from room {room_id}", category="world")
-
-            debug_log(f"Found {len(filtered_items)} items in room {room_id}: {filtered_items}", category="world")
-            return filtered_items
-
-        # Filter removed items from locations-only list as well
-        filtered_items = [item_id for item_id in items_from_locations if item_id not in self.removed_items]
-        debug_log(f"Found {len(filtered_items)} items in room {room_id}: {filtered_items}", category="world")
-        return filtered_items
-    
     def get_enemies_in_room(self, room_id):
-        """Get all enemies in a room"""
-        debug_log(f"Getting enemies in room {room_id}", category="world")
-        # Get all enemies from the enemy_locations dictionary
-        enemies_from_locations = [enemy_id for enemy_id, location in self.enemy_locations.items() if location == room_id]
+        """Enemy ids currently alive in room_id."""
+        enemies = [
+            enemy_id
+            for enemy_id, location in self.enemy_locations.items()
+            if location == room_id
+        ]
+        debug_log(f"Found {len(enemies)} enemies in room {room_id}: {enemies}", category="world")
+        return enemies
 
-        # As a backup, check the room data directly (some enemies might not be in the tracking dict)
-        room_data = self.get_room(room_id)
-        if room_data and room_data.enemies:
-            enemies_in_room_data = room_data.enemies or []  # Handle None by returning empty list
-            # Combine both sources, ensuring no duplicates
-            combined_enemies = list(set(enemies_from_locations + enemies_in_room_data))
-            debug_log(f"Found {len(combined_enemies)} enemies in room {room_id}: {combined_enemies}", category="world")
-            return combined_enemies
-
-        debug_log(f"Found {len(enemies_from_locations)} enemies in room {room_id}: {enemies_from_locations}", category="world")
-        return enemies_from_locations
-    
     def get_npcs_in_room(self, room_id):
-        """Get all NPCs in a room"""
-        debug_log(f"Getting NPCs in room {room_id}", category="world")
-        # Get all NPCs from the npc_locations dictionary
-        npcs_from_locations = [npc_id for npc_id, location in self.npc_locations.items() if location == room_id]
-
-        # As a backup, check the room data directly (some npcs might not be in the tracking dict)
-        room_data = self.get_room(room_id)
-        if room_data and room_data.npcs:
-            npcs_in_room_data = room_data.npcs or []  # Handle None by returning empty list
-            # Combine both sources, ensuring no duplicates
-            combined_npcs = list(set(npcs_from_locations + npcs_in_room_data))
-            debug_log(f"Found {len(combined_npcs)} NPCs in room {room_id}: {combined_npcs}", category="world")
-            return combined_npcs
-
-        debug_log(f"Found {len(npcs_from_locations)} NPCs in room {room_id}: {npcs_from_locations}", category="world")
-        return npcs_from_locations
+        """NPC ids currently present in room_id."""
+        npcs = [
+            npc_id
+            for npc_id, location in self.npc_locations.items()
+            if location == room_id
+        ]
+        debug_log(f"Found {len(npcs)} NPCs in room {room_id}: {npcs}", category="world")
+        return npcs
     
     def get_item(self, item_id):
         """Get item data by ID (typed template dumped to a runtime dict)."""
@@ -1162,21 +1140,12 @@ class GameWorld:
                     debug_log(f"Removed enemy with display name {enemy_id} from enemy_locations (room: {room_id})")
                     break
         
-        # If we found the room, also make sure to remove from the room's direct data
+        # NOTE: the loaded Room models are shared, immutable-by-convention content
+        # templates. We deliberately do NOT strip the enemy from room_data.enemies
+        # here — deleting it from enemy_locations above is the whole removal, and
+        # mutating the template used to be a workaround for the YAML fallback that
+        # get_enemies_in_room no longer has.
         if room_id:
-            room_data = self.get_room(room_id)
-            if room_data and room_data.enemies:
-                if enemy_id in room_data.enemies:
-                    room_data.enemies.remove(enemy_id)
-                    debug_log(f"Removed enemy {enemy_id} from room {room_id} data")
-
-                # Check if there are similar IDs (with extensions) to remove
-                enemy_base_id = enemy_id.split('.')[0]
-                for e_id in list(room_data.enemies):
-                    if e_id.startswith(enemy_base_id):
-                        room_data.enemies.remove(e_id)
-                        debug_log(f"Removed related enemy {e_id} from room {room_id} data")
-            
             # Emit enemy defeated event
             enemy_data = self.get_enemy(enemy_id)
             event_bus.emit_event(
