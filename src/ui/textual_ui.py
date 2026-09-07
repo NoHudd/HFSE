@@ -30,6 +30,7 @@ from src.ui.panels.stats_panel import StatsPanel
 from src.ui.panels.scene_view import SceneView
 from src.ui.screens.combat_hint import CombatModeHintScreen
 from src.ui.screens.log_viewer import LogViewerScreen
+from src.ui.screens.quit_confirm import QuitConfirmScreen
 from src.ui.screens.selection_screen import SelectionCard, SelectionScreen
 from src.ui.screens.settings_screen import SettingsScreen
 from src.ui.command_suggester import CommandSuggester
@@ -109,6 +110,7 @@ class TextualGameUI(App):
         (EventType.ENEMY_DEFEATED, "_on_enemy_defeated"),
         (EventType.GAME_WON, "_on_game_won"),
         (EventType.GAME_QUIT, "_on_game_quit"),
+        (EventType.QUIT_CONFIRM_REQUESTED, "_on_quit_confirm_requested"),
     ]
 
     def _setup_event_subscriptions(self):
@@ -612,6 +614,19 @@ class TextualGameUI(App):
             {"command": "quit", "game_state": state_manager.current_state},
             "TextualGameUI",
         )
+
+    def _on_quit_confirm_requested(self, event) -> None:
+        """Show the quit chooser instead of making the player type a letter."""
+        def answer(choice: str) -> None:
+            event_bus.emit_event(
+                EventType.COMMAND_ENTERED,
+                {"command": choice, "game_state": state_manager.current_state},
+                "QuitConfirmScreen",
+            )
+
+        # Deferred so the Enter/ESC that asked to quit cannot fall through onto
+        # the new screen's own bindings and answer it instantly.
+        self.call_after_refresh(self.push_screen, QuitConfirmScreen(answer))
 
     def _on_game_quit(self, event) -> None:
         """The domain confirmed the quit: stop the app so Textual restores the

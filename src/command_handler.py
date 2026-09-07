@@ -1072,6 +1072,16 @@ class CommandHandler:
 
         if "message" in effect:
             self.output.write(f"[italic cyan]{effect['message']}[/italic]")
+
+        if "story_flag" in effect:
+            # Learning something can open a path: a hidden room may declare a
+            # `discovery_requirement`, and `ls -a` only reveals it once the
+            # corresponding flag is set. This is the quiet setter — lore reads
+            # use _trigger_story_flag, which also announces and auto-saves.
+            flag = effect["story_flag"]
+            if not self.player.get_story_flag(flag):
+                self.player.set_story_flag(flag, True)
+                debug_log(f"Story flag '{flag}' set by effect")
         
         if "heal" in effect:
             amount = effect["heal"]

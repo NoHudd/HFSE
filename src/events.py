@@ -51,6 +51,14 @@ class EventType(Enum):
     # Subscribed by: game_engine.py
     # Data: {}
 
+    QUIT_CONFIRM_REQUESTED = auto()
+    # Emitted by: commands/system.py (quit, when there is progress to lose)
+    # Subscribed by: textual_ui.py (shows the chooser modal)
+    # Data: {}
+    #
+    # The domain still accepts typed y/n/c, so a frontend that ignores this
+    # event (the headless driver) keeps working exactly as before.
+
     GAME_QUIT = auto()
     # Emitted by: command_handler.py (_perform_quit), game_engine.py (menu exit)
     # Subscribed by: textual_ui.py (App.exit), engine/headless/ui.py (records it)

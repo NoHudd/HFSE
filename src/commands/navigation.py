@@ -229,6 +229,22 @@ class LsCommand(Command):
 
     # -- sections -------------------------------------------------------------
 
+    @staticmethod
+    def _may_discover(ctx: "CommandHandler", room_id: str) -> bool:
+        """Whether `ls -a` is allowed to reveal this hidden room yet.
+
+        A room may declare a `discovery_requirement`: a story flag the player
+        must hold before the directory shows up at all. It exists so a room the
+        player is not ready for cannot be stumbled into — /proc/self is the Sudo
+        Trial, an unfleeable boss, and it stays invisible until something in the
+        world has actually told you the trial is there.
+        """
+        room = ctx.world.get_room(room_id)
+        requirement = getattr(room, "discovery_requirement", None) if room else None
+        if not requirement:
+            return True
+        return bool(ctx.player.get_story_flag(requirement))
+
     def _render_directories(
         self, ctx: "CommandHandler", output: Text, room_id: str,
         show_all: bool, long_format: bool,
@@ -242,7 +258,7 @@ class LsCommand(Command):
         for child in children:
             if ctx.world.is_discovered(child):
                 visible.append(child)
-            elif show_all:
+            elif show_all and self._may_discover(ctx, child):
                 if ctx.world.discover_room(child):
                     revealed.append(child)
                 visible.append(child)

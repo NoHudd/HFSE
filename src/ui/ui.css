@@ -359,6 +359,22 @@ CombatModeHintScreen > #combat-hint-content {
 }
 
 /* =============================================================================
+   QUIT CONFIRMATION MODAL
+   ============================================================================= */
+
+QuitConfirmScreen {
+    align: center middle;
+}
+
+QuitConfirmScreen > #quit-confirm {
+    width: 56;
+    height: auto;
+    border: thick $warning;
+    background: $surface;
+    padding: 1 2;
+}
+
+/* =============================================================================
    DEV TOOLS: Log Viewer Modal
    ============================================================================= */
 

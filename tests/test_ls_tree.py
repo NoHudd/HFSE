@@ -44,16 +44,42 @@ def test_ls_a_adds_dot_and_dotdot(session: GameSession) -> None:
 
 
 def test_ls_a_reveals_a_hidden_child(session: GameSession) -> None:
-    # /proc holds the hidden /proc/self and has no enemies, so ls is not blocked
-    # by the combat gate.
-    session.player.current_room = "proc_secrets"
-    assert session.world.get_room_state("mirror_sector")["hidden"] is True
+    # / holds the hidden /root and has no enemies, so ls is not blocked by the
+    # combat gate.
+    session.player.current_room = "root"
+    assert session.world.get_room_state("ghost_hidden")["hidden"] is True
 
-    assert "self/" not in _ls(session), "hidden child must not show without -a"
+    assert "root/" not in _ls(session), "hidden child must not show without -a"
 
     revealed = _ls(session, "-a")
-    assert "self/" in revealed
+    assert "root/" in revealed
+    assert session.world.get_room_state("ghost_hidden")["hidden"] is False
+
+
+def test_discovery_requirement_gates_the_reveal(session: GameSession) -> None:
+    """/proc/self is the Sudo Trial: an unfleeable boss. It stays invisible until
+    something in the world has told the player the trial exists, so nobody can
+    stumble into an unwinnable fight while exploring."""
+    session.player.current_room = "proc_secrets"
+    assert session.player.get_story_flag("sudo_quest_active") is False
+
+    assert "self/" not in _ls(session, "-a"), (
+        "ls -a revealed the trial before the player was told about it"
+    )
+    assert session.world.get_room_state("mirror_sector")["hidden"] is True
+
+    # Talking to the Process Scheduler is what starts the quest.
+    session.submit("talk scheduler_process.sys")
+    assert session.player.get_story_flag("sudo_quest_active") is True
+
+    assert "self/" in _ls(session, "-a")
     assert session.world.get_room_state("mirror_sector")["hidden"] is False
+
+
+def test_gated_room_is_unreachable_until_revealed(session: GameSession) -> None:
+    out = "\n".join(str(line) for line in session.submit("cd /proc/self"))
+    assert "No such file or directory" in out
+    assert session.player.current_room == "home_grove"
 
 
 def test_ls_is_blocked_while_hostiles_are_present(session: GameSession) -> None:
