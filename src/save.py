@@ -16,8 +16,9 @@ SAVE_VERSION = 3
 # broken run, we refuse them and say why.
 MIN_SUPPORTED_VERSION = 3
 
-# Autosaves fire on every room move; without a cap the pool grows unbounded and
-# every save/list operation slows with directory size (observed: 16k files).
+# Autosaves fire on each story beat (a lore file read), plus every manual save.
+# Without a cap the pool grows unbounded and every save/list operation slows
+# with directory size (observed: 16k files).
 MAX_SAVE_FILES = 20
 
 

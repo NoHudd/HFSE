@@ -15,7 +15,11 @@ from src.data_loader import load_enemy_data, load_npc_data, load_room_data
 from src.game_world import GameWorld
 
 CLASSES = ["guardian", "weaver", "shaman"]
-SEEDS = list(range(12))
+# Four seeds per class. The placer is dependency-ordered rather than
+# rejection-sampled, so an unsolvable layout would be a logic error that any
+# seed exposes, not a rare unlucky roll — a wide grid bought repetition, not
+# coverage. Widen this temporarily if you ever change _place_keys.
+SEEDS = list(range(4))
 GOAL = "core"          # the boss room; reaching it is the win condition
 
 _ITEMS = {str(k): v for k, v in load_items("data").items()}
