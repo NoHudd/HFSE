@@ -1,52 +1,80 @@
 # Haunted Terminal — Reference
 
 Full command list, classes, mechanics, and tips. The game teaches most of this
-as you play (`help` in-game is always up to date) — this is here if you want
-to look something up.
+as you play (`help` in-game is always up to date, and `man <command>` explains
+the real Unix ones) — this is here if you want to look something up.
 
 ## Commands
 
-### Navigation
-- `ls` — list items, NPCs, and exits in current directory
-- `ls -a` — reveal hidden files and directories
-- `cd [path]` — move to a different directory (`cd /var` or `cd var`)
-- `pwd` — show current directory
-- `map` — show available locations
-- `find` — search for items, NPCs, or rooms
+### Real Unix commands
 
-### Interaction
-- `cat [filename]` — read file contents (lore fragments, logs, etc.)
-- `take [item]` — pick up an item
-- `drop [item]` — remove an item from inventory
+These behave like their shell counterparts. `man <command>` describes what each
+one does in an actual terminal.
+
+- `ls` — list this directory: its subdirectories, files, processes and hostiles
+- `ls -a` — also show `.`, `..` and hidden entries, revealing hidden directories
+- `ls -l` — long format, with a permission column (`dr--------` means sealed)
+- `cd [path]` — change directory. Absolute (`cd /var`), relative (`cd games`),
+  `cd ..` for the parent, `cd` alone for home
+- `pwd` — print the directory you are in
+- `cat [file]` — read a file
+- `tree` — show the filesystem you have discovered so far
+- `find [path] -name [pattern]` — search for a file
+- `ps` — list running processes
+- `whoami` — your name, class and level
+- `echo [text]`, `clear`, `man [command]`
+
+### Commands of this world
+
+- `take [item]` / `drop [item]` — pick up or put down an item
 - `use [item]` — use a consumable
-- `equip [weapon]` — equip a weapon for combat
+- `equip [weapon]` — ready a weapon or a piece of armor
 - `examine [item]` — inspect an item's properties
-- `talk [npc]` — speak with NPCs for hints and lore
+- `talk [npc]` — speak with a process for hints and lore
+- `attack [enemy]` — start a fight
+- `inventory` / `inv` — view your items
+- `journal` — story memories you have restored
+- `keys` — key progression
+- `shortcuts` — item shortcuts and typing tips
+- `save` — save your progress
+- `quit` / `exit` — exit the game (offers to save). Ctrl+Q, Ctrl+C and ESC do
+  the same thing
 
 ### Combat
+
 Combat opens in Selection Mode automatically — press `1`-`9` to attack, `0` to
 flee. Press `TAB` to type `use [item]` instead, `TAB` again to return to
 Selection Mode.
 
-### System
-- `inventory` / `inv` — view your items
-- `keys` — show key progression system
-- `ps` — show running processes
-- `shortcuts` — list item shortcuts and typing tips
-- `help` — display available commands
-- `save` — save your progress
-- `quit` / `exit` — exit the game (offers to save)
-
 ## The Filesystem
 
-- **`/dev/null` — The Void**: where you awakened. Void pull drains HP without Null-Void Cloak.
-- **`/home/lost+found` — The Graveyard**: orphaned files and broken symlinks. Find your `.bash_profile`.
-- **`/bin` — The Armory**: sacred command icons (cp, mv, rm). The Librarian guides you to lore.
-- **`/var/log` — The Memory Banks**: crash logs and error files. Discover the Creator's Typo.
-- **`/etc/iptables` — The Kernel Gate**: Firewall Knight blocks passage. Requires chmod_key.
-- **`/boot/kernel` — The Core**: final confrontation with the Daemon Overlord.
-- **`/proc/self` — The Mirror Sector**: Sudo Trial — fight your Shadow Process.
-- **`/usr/share/games/cowsay/.secret/` — The Bovine Sanctuary**: easter egg location.
+The rooms form a real directory tree. You may `cd` to any path you have
+permission to reach — you are not limited to neighbours. Permission is needed on
+every directory along the way, so a sealed `/usr` also seals `/usr/games`.
+
+```
+/                       Root
+├── bin/                The Armory — sacred command icons (cp, mv, rm)
+├── boot/               The Core — the Daemon Overlord waits here   [master_key]
+├── dev/                The Void — where deleted data accumulates   [sudo badge]
+├── etc/                The Kernel Gate — the Firewall Knight        [chmod_key]
+├── home/               The Graveyard — where you wake up
+├── mnt/                Mount Forest — mounted drives
+├── opt/                Mage Tower               [opt_key, Weaver only, hidden]
+├── proc/               Process Secrets
+│   └── self/           The Mirror Sector — the Sudo Trial            [hidden]
+├── root/               Hidden Directory — ancient knowledge      [system_badge]
+├── srv/                Warrior Tomb           [opt_key, Guardian only]
+├── usr/                The Arcane Library                            [lib_key]
+│   └── games/          The Game Gallery
+│       └── cowsay/     The Bovine Sanctuary — easter egg             [hidden]
+└── var/                The Memory Banks — crash logs, the Creator's Typo
+    ├── backups/        The Archive                                   [hidden]
+    └── tmp/            Deprecated Directory
+```
+
+Hidden directories do not appear until you find them. `ls -a` in the parent is
+the usual way; `find /dev -name null` and `ps` also reveal one each.
 
 ## Character Classes
 
@@ -54,27 +82,41 @@ Selection Mode.
 - **Base Stats**: 120 HP, 10 DMG
 - **Starter Weapon**: Segmentation Fault Shield
 - **Playstyle**: high survivability, defensive abilities
-- **Attacks**: Strike, Power Strike, Shield Bash
+- **Attacks**: Strike (+5), Power Strike (+19, 2t cooldown), Shield Bash (+10, 3t)
 
 ### Weaver (Mage)
 - **Base Stats**: 90 HP, 15 DMG
 - **Starter Weapon**: Null Pointer
 - **Playstyle**: high damage output, glass cannon
-- **Attacks**: Arcane Bolt, Fireball, Frost Nova
+- **Attacks**: Arcane Bolt (+6), Fireball (+18, 2t), Frost Nova (+12, 3t)
 
 ### Shaman (Hybrid)
-- **Base Stats**: 100 HP, 8 DMG
+- **Base Stats**: 120 HP, 10 DMG
 - **Starter Weapon**: Daemon Whisper
 - **Playstyle**: balanced, healing capabilities
-- **Attacks**: Nature Strike, Ancient Fury, Healing Strike
+- **Attacks**: Nature Strike (+6), Ancient Fury (+17, 2t), Healing Strike (+8, 3t)
+
+Attack damage is your total damage plus the attack's bonus. Each attack also has
+an accuracy roll, so a miss is possible.
 
 ## Game Mechanics
 
 ### Harvesting Cycles (XP)
 - Defeat enemies to gain harvesting cycles
-- Base: 50 cycles per enemy, 150 for bosses
+- Each enemy awards its own value, from 15 for the weakest to 150 for the
+  Daemon Overlord; bosses award triple
 - Level up: +10 Max HP, +2 DMG
-- Exponential scaling: each level requires 1.5x more cycles
+- Each level costs 1.5x the previous one (100, 150, 225, …). There is no cap
+- Your difficulty setting scales the award
+
+### Permissions and keys
+- A sealed directory names the key it needs. Carrying that key opens it
+  automatically when you walk in
+- `lib_key` opens `/usr`, `chmod_key` opens `/etc`, `master_key` opens `/boot`,
+  `opt_key` opens the two class areas, `system_badge` opens `/root`
+- The `sudo_privileges_badge`, earned by beating your Shadow Process in
+  `/proc/self`, opens `/dev`
+- Keys are placed so that a run is always completable
 
 ### Item Persistence
 - **Persistent items** survive death (weapons, armor, keys)
@@ -82,41 +124,42 @@ Selection Mode.
 - Check item descriptions for persistence type
 
 ### Story Progression
-- Read lore fragments to unlock story flags
-- Story flags gate access to special areas (Mirror Sector, Bovine Sanctuary)
-- Multiple endings based on class and choices
+- Read lore fragments with `cat` to unlock story flags
+- Reading one auto-saves your progress
+- Your ending is determined by your class
 
-### Rarity System
-Items spawn based on directory depth:
-- **`/home`, `/var`**: common items dominate
-- **`/bin`, `/etc`, `/usr`**: uncommon and rare items
-- **`/dev`**: epic items spawn
-- **`/root`**: legendary items only
+### Rarity
+Items spawn by rarity, weighted by your class and by the directory they are in.
+Deeper and more dangerous directories skew toward better loot; `/home` and `/var`
+lean common, `/dev` favours epic, and `/` can produce legendaries.
 
 ## Tips
 
-1. **Use `ls -a`** to reveal hidden files and secret paths
+1. **Use `ls -a`** to reveal hidden directories
 2. **Read everything** — lore fragments contain crucial story beats
-3. **Talk to NPCs** — they provide hints about item locations and story progression
+3. **Talk to NPCs** — they provide hints about item locations and progression
 4. **Save often** — the filesystem is dangerous
-5. **Explore thoroughly** — hidden rooms contain powerful items
+5. **`man` anything** you do not recognise
 6. **Choose items wisely** — ephemeral items don't persist through death
 
 ## What You'll Learn
 
-- Command-line navigation: `cd`, `ls`, `ls -a`, `pwd`, `cat`, `find`
-- File system structure: understanding the Unix directory hierarchy
+- Navigation: `cd` with absolute and relative paths, `..`, `.`, `pwd`, `ls`
+- Listing: `ls -a` for hidden entries, `ls -l` for permissions
+- Filesystem structure: what `/bin`, `/etc`, `/var`, `/usr`, `/proc`, `/dev`,
+  `/boot`, `/tmp` and `/root` are actually for
 - Hidden files: the significance of dot files (`.bash_profile`, `.moo`)
-- System concepts: processes, daemons, `/dev/null`, `/proc`, init, permissions
-- Problem-solving through exploration and reading
+- Permissions: why you need access to a directory *and* everything above it
+- Processes: PIDs, PPIDs, `init` as PID 1, daemons and orphans
+- Reading documentation with `man`
 
 ## Achievements & Challenges
 
-- Complete the Sudo Trial and earn the sudo_privileges_badge
+- Complete the Sudo Trial in `/proc/self` and earn the sudo_privileges_badge
 - Find all 6 lore fragments to understand the full story
 - Discover the Great ASCII Bovine easter egg
-- Defeat the Daemon Overlord and choose your ending
-- Reach max level through harvesting cycles
+- Defeat the Daemon Overlord in `/boot`
+- Reach the Archive and the Hidden Directory
 
 ## Development
 
@@ -134,13 +177,14 @@ Contributors also need the dev tooling (pytest, mypy, ruff):
 
 ```bash
 pip install -r requirements-dev.txt
+make check          # ruff + mypy + pytest + content validation
 ```
 
 ### Project Structure
 
 ```
 main.py        # entry point → src.game_engine.main
-src/           # game logic (runtime): engine, world, player, combat, commands/, ui/, scene/
+src/           # the running game: engine, world, player, combat, commands/, ui/, scene/
 engine/        # typed content schema + validation + headless test driver
 data/          # all game content as YAML — rooms/ enemies/ npcs/ items/ + classes/attacks/abilities
 assets/        # pixel-art sprites and backdrops (PNG)
@@ -148,3 +192,8 @@ sim/           # difficulty simulation harness
 config/        # dev settings (settings.py gitignored)
 tests/ · utils/
 ```
+
+Adding content is a matter of dropping a YAML file into the matching `data/`
+directory and running `python -m engine.validate data`, which fails loudly on a
+dangling reference, a duplicate path, or a room whose parent directory does not
+exist.

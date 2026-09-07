@@ -1,7 +1,7 @@
 name: The Great ASCII Bovine
 description: A sacred entity composed entirely of ASCII art. The cosmic cow speaks in moo-ing wisdom.
 detailed_description: |
-  /usr/share/games/cowsay/.secret/.moo - The Great ASCII Bovine
+  /usr/games/cowsay/.moo - The Great ASCII Bovine
 
    _________________________________________
   /                                         \

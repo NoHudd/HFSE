@@ -4,12 +4,18 @@
 
 # Haunted Terminal
 
-You wake up in `/dev/null` with no memory, the last surviving process after a
-catastrophic system failure. The filesystem around you is corrupted and
-haunted by the daemons of what went wrong. Explore it, fight what's left of
-it, and piece together what happened — using real Unix commands (`cd`, `ls`,
-`cat`, `ls -a`) as your only tools. No prior command-line experience needed;
-the game teaches you as you go.
+You wake up in `/home` with no memory, the last surviving process after a
+catastrophic system failure. The filesystem around you is corrupted and haunted
+by the daemons of what went wrong. Explore it, fight what's left of it, and
+piece together what happened — using real Unix commands (`ls`, `cd`, `cat`,
+`pwd`) as your only tools.
+
+The directories are real ones. `cd ..` walks up the tree, `ls -a` shows what is
+hidden, and a sealed directory stays sealed until you have permission to enter
+it — including permission on every directory above it. Type `man cd` and the
+game tells you what `cd` does in an actual shell, not just in here.
+
+No prior command-line experience needed; the game teaches you as you go.
 
 ---
 
@@ -88,6 +94,7 @@ This project is licensed under the MIT License — see the LICENSE file for deta
 
 **Game Design & Development**: NoHudd
 **Narrative Design**: The Great Kernel Panic storyline
+**Pixel art**: AI-generated, hand-picked and resized
 **Special Thanks**: To all sysadmins who've faced kernel panics
 
 ---
