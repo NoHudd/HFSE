@@ -319,9 +319,8 @@ class ImprovedGameEngine:
         
         if action == "quit":
             logger.info("Player chose to quit")
-            self.cleanup()
-            import sys
-            sys.exit(0)
+            self._cleanup()
+            event_bus.emit_event(EventType.GAME_QUIT, {}, "ImprovedGameEngine")
             
         elif action == "start_new_game":
             # Full setup flow: a new run re-offers difficulty + class (the old
@@ -434,11 +433,11 @@ class ImprovedGameEngine:
         elif command == "2":
             # Load Game
             self._load_game()
-        elif command == "3" or command.lower() == "exit":
-            # Exit
+        elif command == "3" or command.lower() in ("exit", "quit"):
+            # Exit. `quit` is accepted here too: the title screen tells players
+            # "esc to quit", and ESC emits exactly that command.
             self.ui.update_output("Goodbye!")
-            import sys
-            sys.exit(0)
+            event_bus.emit_event(EventType.GAME_QUIT, {}, "ImprovedGameEngine")
         else:
             self.ui.update_output(f"[bold red]Invalid choice: {command}. Please enter 1, 2, or 3.[/bold red]\n")
             # Re-show the title screen to help the player
@@ -995,49 +994,26 @@ def main(ui):
     root_logger.addHandler(file_handler)
     root_logger.setLevel(logging.INFO)
 
+    # Ctrl+C is handled inside the app: Textual binds it (and Ctrl+Q) to the
+    # game's own quit confirmation, so the interrupt never reaches this frame.
+    # The old KeyboardInterrupt branch here offered a save via input() — which
+    # would have fought the TUI for stdin and printed raw Rich markup — and was
+    # unreachable in practice.
     try:
         engine = ImprovedGameEngine(ui=ui)
         engine.run()
-        
-    except KeyboardInterrupt:
-        logger.info("Game interrupted by user (Ctrl+C)")
-        print("\n[yellow]Game interrupted![/yellow]")
-        
-        # Try to offer saving before exit if game is running
-        try:
-            if hasattr(engine, 'cmd_handler') and engine.cmd_handler and hasattr(engine, 'player') and engine.player:
-                print("[bold yellow]You have unsaved progress![/bold yellow]")
-                print("Would you like to save before quitting? (y/n): ", end='')
-                import sys
-                choice = input().lower().strip()
-                
-                if choice == 'y':
-                    from src.save import save_manager
-                    world_state = engine.world.get_state() if hasattr(engine, 'world') else {}
-                    save_path = save_manager.save_game(engine.player, world_state)
-                    print(f"[green]Game saved to: {save_path}[/green]")
-                    
-        except Exception as save_error:
-            logger.error(f"Failed to save on interrupt: {save_error}")
-            print("[red]Failed to save game[/red]")
-            
-        print("[yellow]Goodbye! Thanks for playing Haunted Terminal.[/yellow]")
-        sys.exit(0)
-        
+
     except DataLoadError as e:
         logger.error(f"Data loading failed: {e}")
         print(f"Error: Could not load game data - {e}")
         sys.exit(1)
-        
+
     except GameEngineError as e:
         logger.error(f"Game engine error: {e}")
         print(f"Error: Game engine failed - {e}")
         sys.exit(1)
-        
+
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         print(f"Unexpected error: {e}")
         sys.exit(1)
-
-if __name__ == "__main__":
-    main()

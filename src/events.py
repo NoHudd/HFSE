@@ -51,6 +51,15 @@ class EventType(Enum):
     # Subscribed by: game_engine.py
     # Data: {}
 
+    GAME_QUIT = auto()
+    # Emitted by: command_handler.py (_perform_quit), game_engine.py (menu exit)
+    # Subscribed by: textual_ui.py (App.exit), engine/headless/ui.py (records it)
+    # Data: {}
+    #
+    # The domain asks to stop; the frontend decides how. Calling sys.exit() from
+    # inside a Textual event handler skips the driver's terminal restore, which
+    # is how a clean quit ends up leaving the shell in a mangled state.
+
     # ========================================
     # Player Events
     # ========================================

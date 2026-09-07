@@ -24,6 +24,9 @@ class HeadlessUI:
 
     def __init__(self) -> None:
         self.output_log: list[str] = []
+        # Set when the domain asks to quit; tests assert on it instead of the
+        # process exiting.
+        self.quit_requested = False
         # Back-refs the engine assigns via _bind_ui_refs; unused here but must
         # be assignable.
         self._player_ref: object | None = None
@@ -33,6 +36,11 @@ class HeadlessUI:
         # records the text so tests/sim can assert on the ending).
         from src.events import EventType, event_bus
         event_bus.subscribe(EventType.GAME_WON, self._on_game_won)
+        event_bus.subscribe(EventType.GAME_QUIT, self._on_game_quit)
+
+    def _on_game_quit(self, event: Any) -> None:
+        self.quit_requested = True
+        self.output_log.append("[quit]")
 
     def _on_game_won(self, event: Any) -> None:
         data = getattr(event, "data", None) or {}
@@ -72,6 +80,7 @@ class HeadlessUI:
     def shutdown(self) -> None:  # pragma: no cover - lifecycle no-op
         from src.events import EventType, event_bus
         event_bus.unsubscribe(EventType.GAME_WON, self._on_game_won)
+        event_bus.unsubscribe(EventType.GAME_QUIT, self._on_game_quit)
 
     def update_inventory(self, content: str) -> None:
         pass

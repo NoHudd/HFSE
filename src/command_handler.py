@@ -412,8 +412,7 @@ class CommandHandler:
         if self._in_game_over_mode:
             result = self._handle_game_over_choice(command.strip())
             if result == "quit":
-                import sys
-                sys.exit(0)
+                event_bus.emit_event(EventType.GAME_QUIT, {}, "CommandHandler")
             elif result == "restart_from_save" or result == "start_new_game":
                 # Signal the game engine to restart
                 event_bus.emit_event(
@@ -1480,7 +1479,12 @@ Not because you fixed them. Because you forgave them.
             self.output.write("[bold white]Please choose:[/bold white] [green]y[/green] (save & quit), [yellow]n[/yellow] (quit without saving), [red]c[/red] (cancel)")
 
     def _perform_quit(self):
-        """Actually quit the game."""
+        """Actually quit the game.
+
+        Emits GAME_QUIT rather than calling exit(): the domain layer must not
+        tear the process down from inside a Textual event handler, or the driver
+        never gets to restore the terminal. The UI decides how to stop itself.
+        """
         self.output.write("[yellow]Goodbye! Thanks for playing Haunted Terminal.[/yellow]")
         self.output.write("[dim]The system spirits fade back into the digital void...[/dim]")
-        exit(0) 
+        event_bus.emit_event(EventType.GAME_QUIT, {}, "CommandHandler")

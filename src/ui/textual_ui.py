@@ -51,6 +51,11 @@ class TextualGameUI(App):
     CSS_PATH = os.path.join(os.path.dirname(__file__), "ui.css")
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
+        # Ctrl+Q and Ctrl+C both route through the same confirmation the `quit`
+        # command uses. Textual binds ctrl+q to an immediate exit by default,
+        # which silently discarded unsaved progress.
+        Binding("ctrl+q", "request_quit", "Quit", key_display="ctrl + q", priority=True),
+        Binding("ctrl+c", "request_quit", "Quit", show=False, priority=True),
         Binding("ctrl+p", "open_settings", "Settings", key_display="ctrl + p"),
         Binding("l", "toggle_log_viewer", "Show/Hide Logs", key_display="L"),
         Binding("f5", "restart_game", "Restart Game", key_display="F5"),
@@ -105,6 +110,7 @@ class TextualGameUI(App):
         (EventType.COMBAT_ENDED, "_on_combat_ended"),
         (EventType.ENEMY_DEFEATED, "_on_enemy_defeated"),
         (EventType.GAME_WON, "_on_game_won"),
+        (EventType.GAME_QUIT, "_on_game_quit"),
     ]
 
     def _setup_event_subscriptions(self):
@@ -604,6 +610,19 @@ class TextualGameUI(App):
     # =====================================
     # DEV TOOLS ACTIONS
     # =====================================
+
+    def action_request_quit(self) -> None:
+        """Ask the domain to quit, so the usual save prompt runs first."""
+        event_bus.emit_event(
+            EventType.COMMAND_ENTERED,
+            {"command": "quit", "game_state": state_manager.current_state},
+            "TextualGameUI",
+        )
+
+    def _on_game_quit(self, event) -> None:
+        """The domain confirmed the quit: stop the app so Textual restores the
+        terminal on the way out."""
+        self.exit()
 
     def action_open_settings(self) -> None:
         """Open the settings modal."""
