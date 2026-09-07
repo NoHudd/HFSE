@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import yaml
-import random
 from src import rng
 from utils.debug_tools import debug_log
 from src.events import event_bus, EventType
@@ -364,7 +363,7 @@ class CombatSession:
 
         # Reduce cooldowns by 1 for sequential combat
         combat_system.reduce_cooldowns_by_one(self.player.player_id)
-        self.output.write(f"[bold yellow]⚡ Cooldowns reduced by 1 turn![/bold yellow]")
+        self.output.write("[bold yellow]⚡ Cooldowns reduced by 1 turn![/bold yellow]")
 
         # Show prominent transition message
         transition_msg = f"""
@@ -601,10 +600,11 @@ class CombatSession:
             if "player_mana_restore" in combat_effects and hasattr(self.player, "restore_mana"):
                 self.player.restore_mana(combat_effects["player_mana_restore"])
 
-            # Handle damage boost items
-            if "damage_boost" in item_data:
-                boost = item_data["damage_boost"]
-                # Temporary damage boost could be implemented here
+            # NOTE: no item currently defines damage_boost. There used to be a
+            # stub here that read the field and dropped it on the floor, which
+            # read as "implemented" without being so. If a temporary damage buff
+            # is ever wanted, add it via add_status_effect (which combat already
+            # ticks) rather than reviving a silent no-op.
 
             # Handle consumable items (remove after use) - support both formats
             should_consume = (
@@ -696,7 +696,7 @@ class CombatSession:
             # Check if player leveled up
             if new_level > old_level:
                 self.output.write(f"[bold yellow]⬆ LEVEL UP! You are now level {new_level}![/bold yellow]")
-                self.output.write(f"[green]+10 Max HP, +2 DMG[/green]")
+                self.output.write("[green]+10 Max HP, +2 DMG[/green]")
 
             # Check if more enemies in queue
             if self._engage_next_enemy():
@@ -704,7 +704,7 @@ class CombatSession:
                 return
             else:
                 # All enemies defeated - end combat
-                self.output.write(f"\n[bold green]✓ Area secured - all hostile entities eliminated![/bold green]")
+                self.output.write("\n[bold green]✓ Area secured - all hostile entities eliminated![/bold green]")
                 self._end_combat(victory=True)
                 return
         

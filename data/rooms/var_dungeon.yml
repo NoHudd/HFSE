@@ -34,6 +34,6 @@ story_location: true
 story_beats:
   - typo_discovered
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/var"
-aliases: ["/var", "/var/dungeon", "var", "dungeon"]
+aliases: ["/var", "/var/log", "/var/dungeon", "var", "dungeon"]

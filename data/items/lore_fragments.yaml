@@ -96,7 +96,7 @@ cow_wisdom_log:
     - shaman
   rarity: uncommon
   tags: ["lore", "easter_egg_hint", "bovine"]
-  allowed_zones: ["usr"]  # Found in /usr/share/games (The Game Gallery)
+  allowed_zones: ["usr"]  # Found in /usr/games (The Game Gallery)
   persistence: "persistent"
   usable: false
   readable: true

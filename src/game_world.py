@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-import random
+import logging
+
 from src import rng
-import yaml
-import os
 from utils.debug_tools import debug_log
 from src.events import event_bus, EventType
+
+logger = logging.getLogger(__name__)
 
 class GameWorld:
     """Manages the game world, including rooms, items, enemies, and NPCs"""
@@ -105,10 +106,6 @@ class GameWorld:
         """Scale enemy stats based on player class power scaling"""
         if not enemy_data or not player_class:
             return enemy_data
-        
-        # Get class scaling type
-        class_info = self.class_data.get(player_class)
-        power_scaling = class_info.power_scaling if class_info else "balanced"
         
         # Create scaled copy to avoid modifying original data
         scaled_enemy = enemy_data.copy()
@@ -235,8 +232,8 @@ class GameWorld:
             self._place_starter_weapon(player_class)
         
         if not player_class or player_class not in self.class_data:
-            debug_log(f"Invalid or missing player class, using default placement")
-            return self._place_items_default()
+            debug_log("Invalid or missing player class, using default placement")
+            return self._place_items_default(player_class)
             
         return self._place_items_class_based(player_class)
     
@@ -302,36 +299,97 @@ class GameWorld:
 
         return total_placed
 
+    def _keys_granted_by_enemies(self):
+        """Key ids obtainable as enemy drops, so they are not also scattered."""
+        granted = set()
+        for enemy in self.enemies.values():
+            drops = enemy.get("drops", []) if isinstance(enemy, dict) else (enemy.drops or [])
+            for drop in drops:
+                item_id = drop.get("item") if isinstance(drop, dict) else getattr(drop, "item", None)
+                if item_id and self._is_key(item_id):
+                    granted.add(str(item_id))
+        return granted
+
+    def _is_key(self, item_id):
+        item = self.items.get(item_id)
+        if item is None:
+            return False
+        item_type = item.get("type") if isinstance(item, dict) else item.type
+        return str(item_type).lower() == "key"
+
+    def _rooms_reachable_with(self, held_keys):
+        """Rooms a player holding held_keys could actually walk into.
+
+        Traversal needs permission on every ancestor, so a room is reachable only
+        if nothing on the way to it is locked without a held key. Hidden rooms
+        count as reachable — `ls -a` in the (reachable) parent reveals them.
+        Class-restricted rooms never count: two thirds of players cannot enter
+        them, so nothing required for progression may live there.
+        """
+        from src.room_paths import ancestors, room_at, room_path
+
+        reachable = []
+        for room_id in self.rooms:
+            target = room_path(room_id)
+            ok = True
+            for path in ancestors(target) + [target]:
+                rid = room_at(path)
+                if rid is None:
+                    continue
+                room = self.get_room(rid)
+                if getattr(room, "class_restriction", "") or "":
+                    ok = False
+                    break
+                state = self.room_states.get(rid, {})
+                if state.get("locked", False) and state.get("key_required") not in held_keys:
+                    ok = False
+                    break
+            if ok:
+                reachable.append(room_id)
+        return reachable
+
     def _place_keys(self):
-        """Scatter unplaced keys across non-locked rooms so progression items
-        spread out instead of monopolizing the random-loot pool."""
-        unplaced_keys = [
-            item_id for item_id, item_data in self.items.items()
-            if str(item_data.type).lower() == "key"
+        """Place progression keys so every run is completable.
+
+        Keys are placed in dependency order: each one lands in a room the player
+        can already reach with the keys placed before it. Reachability only ever
+        grows, so this cannot strand a key behind the door it opens — the failure
+        the old "scatter into any unlocked room" version could produce once locks
+        started carrying the difficulty ramp.
+        """
+        from_drops = self._keys_granted_by_enemies()
+        unplaced = [
+            item_id for item_id in self.items
+            if self._is_key(item_id)
             and item_id not in self.item_locations
+            and item_id not in from_drops
         ]
-        if not unplaced_keys:
+        if not unplaced:
             return
 
-        # Eligible rooms: unlocked, not home_grove (starter rooms keep their fixed items)
-        eligible_rooms = [
-            room_id for room_id in self.rooms.keys()
-            if not self.room_states.get(room_id, {}).get("locked", False)
-            and room_id != "home_grove"
-        ]
-        if not eligible_rooms:
-            return
+        rng.shuffle(unplaced)
+        held = set()
 
-        rng.shuffle(unplaced_keys)
-        rng.shuffle(eligible_rooms)
+        while unplaced:
+            spots = [
+                room_id for room_id in self._rooms_reachable_with(held)
+                if room_id != "home_grove"  # starter room keeps its authored items
+            ]
+            if not spots:
+                debug_log(f"WARNING: no reachable room left for keys {unplaced}")
+                return
 
-        # Spread keys across distinct rooms first, then double up if more keys than rooms.
-        for i, key_id in enumerate(unplaced_keys):
-            room_id = eligible_rooms[i % len(eligible_rooms)]
+            key_id = unplaced.pop(0)
+            allowed = self.get_item(key_id).get("allowed_rooms") or []
+            preferred = [r for r in spots if r in allowed] or spots
+
+            room_id = rng.choice(preferred)
             self.item_locations[key_id] = room_id
             self.item_spawn_counts[key_id] = 1
-            debug_log(f"Scattered key {key_id} into room {room_id}")
-    
+            held.add(key_id)
+            debug_log(f"Placed key {key_id} in {room_id} (reachable with {sorted(held)})")
+
+
     def _ensure_home_grove_basics(self):
         """Ensure home_grove has essential consumables for good player experience."""
         # item_locations maps item_id -> room_id, so check it correctly
@@ -353,8 +411,13 @@ class GameWorld:
                 self.item_spawn_counts["health_packet"] = 1
                 debug_log("Added health_packet to home_grove as safety net")
     
-    def _place_items_default(self):
-        """Fallback to original placement algorithm."""
+    def _place_items_default(self, player_class=None):
+        """Fallback placement for an unknown/missing class.
+
+        player_class was read here but never a parameter: this path raised
+        NameError the moment it ran, which is why nobody noticed the fallback
+        was broken — reaching it needs a class outside classes.yaml.
+        """
         debug_log("Using default item placement")
         # Define rarity weights
         rarity_weights = {
@@ -447,9 +510,11 @@ class GameWorld:
         total_items_placed = 0
         
         # Create a list of rooms where items can be placed
-        eligible_rooms = [room_id for room_id in self.rooms.keys() 
-                          if not self.room_states.get(room_id, {}).get("locked", False)]
-        debug_log(f"Found {len(eligible_rooms)} eligible unlocked rooms for item placement")
+        # Locked rooms are eligible: a lock is a *when*, not a *never*. The
+        # tier-3 rooms behind keys are exactly where good loot belongs, and
+        # starving them left players unlocking a door onto an empty room.
+        eligible_rooms = list(self.rooms.keys())
+        debug_log(f"Found {len(eligible_rooms)} eligible rooms for item placement")
         
         # Place items randomly based on weighted rarity
         for _ in range(target_item_count):
@@ -516,13 +581,11 @@ class GameWorld:
             # Item has specific room restrictions
             debug_log(f"Item {item_id} has room restrictions: {allowed_rooms}")
             for room_id in allowed_rooms:
-                # Check if the room exists and is not locked
-                if room_id in self.rooms and not self.room_states.get(room_id, {}).get("locked", False):
+                if room_id in self.rooms:
                     eligible_rooms.append(room_id)
         else:
-            # No specific room restrictions, can go in any unlocked room
-            eligible_rooms = [room_id for room_id in self.rooms.keys() 
-                              if not self.room_states.get(room_id, {}).get("locked", False)]
+            # No specific room restrictions: any room, locked or not.
+            eligible_rooms = list(self.rooms.keys())
         
         # If no eligible rooms, item can't be placed
         if not eligible_rooms:
@@ -944,10 +1007,6 @@ class GameWorld:
 
     def _place_item_in_room(self, item_id, item_data, room_id, max_items_per_room=5):
         """Place a specific item in a specific room."""
-        # Check if room is locked
-        if self.room_states.get(room_id, {}).get("locked", False):
-            return False
-
         # Check item's own zone/room constraints
         if not self._item_fits_room(item_data, room_id):
             return False
@@ -1009,71 +1068,49 @@ class GameWorld:
         debug_log(f"WARNING: Attempted to unlock non-existent room {room_id}")
         return False
     
+    # ------------------------------------------------------------------
+    # Room contents.
+    #
+    # The *_locations dicts are the ONLY runtime truth. World init seeds them
+    # from each room's YAML (see _initialize_world_state), and set_state
+    # restores them from a save.
+    #
+    # These getters used to also union in the room's static YAML list "as a
+    # backup". That made defeat/pickup unrepresentable across a save: killing an
+    # enemy removed it from enemy_locations and mutated the in-memory Room model,
+    # but _load_game_data_for_load re-reads the YAML fresh, so every scripted
+    # boss came back to life on load. Do not reintroduce the fallback.
+    # ------------------------------------------------------------------
+
     def get_items_in_room(self, room_id):
-        """Get all items in a room"""
-        debug_log(f"Getting items in room {room_id}", category="world")
+        """Item ids currently on the floor of room_id."""
+        items = [
+            item_id
+            for item_id, location in self.item_locations.items()
+            if location == room_id and item_id not in self.removed_items
+        ]
+        debug_log(f"Found {len(items)} items in room {room_id}: {items}", category="world")
+        return items
 
-        # Get all items from the item_locations dictionary
-        items_from_locations = [item_id for item_id, location in self.item_locations.items() if location == room_id]
-        debug_log(f"Items from locations for {room_id}: {items_from_locations}", category="world")
-
-        # As a backup, check the room data directly (some items might not be in the tracking dict)
-        room_data = self.get_room(room_id)
-        if room_data and room_data.items:
-            items_in_room_data = room_data.items or []  # Handle None by returning empty list
-            debug_log(f"Items from room data for {room_id}: {items_in_room_data}", category="world")
-            # Combine both sources, ensuring no duplicates
-            combined_items = list(set(items_from_locations + items_in_room_data))
-
-            # Filter out permanently removed items
-            filtered_items = [item_id for item_id in combined_items if item_id not in self.removed_items]
-            if len(filtered_items) != len(combined_items):
-                removed_count = len(combined_items) - len(filtered_items)
-                debug_log(f"Filtered out {removed_count} permanently removed items from room {room_id}", category="world")
-
-            debug_log(f"Found {len(filtered_items)} items in room {room_id}: {filtered_items}", category="world")
-            return filtered_items
-
-        # Filter removed items from locations-only list as well
-        filtered_items = [item_id for item_id in items_from_locations if item_id not in self.removed_items]
-        debug_log(f"Found {len(filtered_items)} items in room {room_id}: {filtered_items}", category="world")
-        return filtered_items
-    
     def get_enemies_in_room(self, room_id):
-        """Get all enemies in a room"""
-        debug_log(f"Getting enemies in room {room_id}", category="world")
-        # Get all enemies from the enemy_locations dictionary
-        enemies_from_locations = [enemy_id for enemy_id, location in self.enemy_locations.items() if location == room_id]
+        """Enemy ids currently alive in room_id."""
+        enemies = [
+            enemy_id
+            for enemy_id, location in self.enemy_locations.items()
+            if location == room_id
+        ]
+        debug_log(f"Found {len(enemies)} enemies in room {room_id}: {enemies}", category="world")
+        return enemies
 
-        # As a backup, check the room data directly (some enemies might not be in the tracking dict)
-        room_data = self.get_room(room_id)
-        if room_data and room_data.enemies:
-            enemies_in_room_data = room_data.enemies or []  # Handle None by returning empty list
-            # Combine both sources, ensuring no duplicates
-            combined_enemies = list(set(enemies_from_locations + enemies_in_room_data))
-            debug_log(f"Found {len(combined_enemies)} enemies in room {room_id}: {combined_enemies}", category="world")
-            return combined_enemies
-
-        debug_log(f"Found {len(enemies_from_locations)} enemies in room {room_id}: {enemies_from_locations}", category="world")
-        return enemies_from_locations
-    
     def get_npcs_in_room(self, room_id):
-        """Get all NPCs in a room"""
-        debug_log(f"Getting NPCs in room {room_id}", category="world")
-        # Get all NPCs from the npc_locations dictionary
-        npcs_from_locations = [npc_id for npc_id, location in self.npc_locations.items() if location == room_id]
-
-        # As a backup, check the room data directly (some npcs might not be in the tracking dict)
-        room_data = self.get_room(room_id)
-        if room_data and room_data.npcs:
-            npcs_in_room_data = room_data.npcs or []  # Handle None by returning empty list
-            # Combine both sources, ensuring no duplicates
-            combined_npcs = list(set(npcs_from_locations + npcs_in_room_data))
-            debug_log(f"Found {len(combined_npcs)} NPCs in room {room_id}: {combined_npcs}", category="world")
-            return combined_npcs
-
-        debug_log(f"Found {len(npcs_from_locations)} NPCs in room {room_id}: {npcs_from_locations}", category="world")
-        return npcs_from_locations
+        """NPC ids currently present in room_id."""
+        npcs = [
+            npc_id
+            for npc_id, location in self.npc_locations.items()
+            if location == room_id
+        ]
+        debug_log(f"Found {len(npcs)} NPCs in room {room_id}: {npcs}", category="world")
+        return npcs
     
     def get_item(self, item_id):
         """Get item data by ID (typed template dumped to a runtime dict)."""
@@ -1162,21 +1199,12 @@ class GameWorld:
                     debug_log(f"Removed enemy with display name {enemy_id} from enemy_locations (room: {room_id})")
                     break
         
-        # If we found the room, also make sure to remove from the room's direct data
+        # NOTE: the loaded Room models are shared, immutable-by-convention content
+        # templates. We deliberately do NOT strip the enemy from room_data.enemies
+        # here — deleting it from enemy_locations above is the whole removal, and
+        # mutating the template used to be a workaround for the YAML fallback that
+        # get_enemies_in_room no longer has.
         if room_id:
-            room_data = self.get_room(room_id)
-            if room_data and room_data.enemies:
-                if enemy_id in room_data.enemies:
-                    room_data.enemies.remove(enemy_id)
-                    debug_log(f"Removed enemy {enemy_id} from room {room_id} data")
-
-                # Check if there are similar IDs (with extensions) to remove
-                enemy_base_id = enemy_id.split('.')[0]
-                for e_id in list(room_data.enemies):
-                    if e_id.startswith(enemy_base_id):
-                        room_data.enemies.remove(e_id)
-                        debug_log(f"Removed related enemy {e_id} from room {room_id} data")
-            
             # Emit enemy defeated event
             enemy_data = self.get_enemy(enemy_id)
             event_bus.emit_event(
@@ -1255,34 +1283,58 @@ class GameWorld:
         debug_log(f"Room {room_id} has exits: {exits}")
         return exits
     
-    def can_move_to(self, from_room, to_room):
-        """Check if player can move from one room to another"""
-        debug_log(f"Checking if player can move from {from_room} to {to_room}")
-        
-        # First check if the exit exists
-        if to_room not in self.get_exits(from_room):
-            debug_log(f"Move failed: {to_room} is not an exit from {from_room}")
-            return False, "That exit doesn't exist."
-        
-        # Check if destination is hidden
-        room_state = self.get_room_state(to_room)
-        if room_state.get("hidden", False):
-            debug_log(f"Move failed: {to_room} is hidden")
-            return False, "That path is not visible."
-        
-        # Check if destination is locked
-        if room_state.get("locked", False):
-            key_required = room_state.get("key_required")
-            if key_required:
-                debug_log(f"Move failed: {to_room} is locked and requires key: {key_required}")
-                return False, f"That room is locked. You need {key_required} to enter."
-            else:
-                debug_log(f"Move failed: {to_room} is locked")
-                return False, "That room is locked."
-                
-        debug_log(f"Move allowed: {from_room} to {to_room}")
+    def is_discovered(self, room_id):
+        """Whether a room is visible at all. Undiscovered rooms behave like paths
+        that do not exist — `ls -a` in the parent is what reveals them."""
+        return not self.get_room_state(room_id).get("hidden", False)
+
+    def check_access(self, room_id, player=None):
+        """Can the player enter room_id? Returns (allowed, denial or None).
+
+        Movement is not restricted by the exit graph — you may `cd` to any path,
+        exactly as in a real shell. What restricts you is permission, and, as on
+        a real filesystem, you need it on *every ancestor directory*, not just
+        the destination. So /usr being sealed also seals /usr/games beneath it.
+
+        A denial is a dict: {"path", "room_id", "reason", "key_required",
+        "class_restriction"}, where reason is "missing" | "locked" | "class".
+        """
+        from src.room_paths import ancestors, room_at, room_path
+
+        target_path = room_path(room_id)
+        for path in ancestors(target_path) + [target_path]:
+            rid = room_at(path)
+            if rid is None:
+                continue
+            state = self.get_room_state(rid)
+
+            if state.get("hidden", False):
+                return False, {
+                    "path": path, "room_id": rid, "reason": "missing",
+                    "key_required": None, "class_restriction": None,
+                }
+            # Class restriction is reported before the lock: a key the player can
+            # never use is not the useful half of the message.
+            room = self.get_room(rid)
+            restriction = getattr(room, "class_restriction", "") if room else ""
+            if restriction and player is not None:
+                if str(getattr(player, "player_class", "")).lower() != str(restriction).lower():
+                    return False, {
+                        "path": path, "room_id": rid, "reason": "class",
+                        "key_required": None, "class_restriction": restriction,
+                    }
+
+            if state.get("locked", False):
+                return False, {
+                    "path": path, "room_id": rid, "reason": "locked",
+                    "key_required": state.get("key_required"),
+                    "class_restriction": None,
+                }
+
+        debug_log(f"Access granted to {room_id} ({target_path})")
         return True, None
-    
+
+
     
     def discover_room(self, room_id):
         """Make a hidden room visible

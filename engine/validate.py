@@ -15,7 +15,9 @@ from engine.content import (
     GameContent,
     find_broken_references,
     find_dialogue_problems,
+    find_nav_problems,
     find_reference_warnings,
+    find_tree_problems,
     load_all,
 )
 from engine.schema import ContentError, RoomId
@@ -50,9 +52,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"CONTENT LOAD FAILED:\n{exc}", file=sys.stderr)
         return 1
 
-    problems = find_broken_references(content) + find_dialogue_problems(content)
+    problems = (
+        find_broken_references(content)
+        + find_nav_problems(content)
+        + find_tree_problems(content)
+        + find_dialogue_problems(content)
+    )
     if problems:
-        print(f"LINK FAILED — {len(problems)} dangling reference(s):", file=sys.stderr)
+        print(f"LINK FAILED — {len(problems)} content problem(s):", file=sys.stderr)
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
         return 1

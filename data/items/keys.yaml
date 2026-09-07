@@ -1,20 +1,20 @@
 lib_key:
   name: Library Key
-  short_description: A key that unlocks the var_dungeon
-  description: A digital key with arcane symbols etched into its surface. It appears to unlock the passage to the variable dungeon (/var/dungeon).
+  short_description: Grants read access to /usr, the Arcane Library
+  description: A digital key with arcane symbols etched into its surface. It grants the execute permission needed to traverse /usr - the Arcane Library, where the system's shared knowledge is kept.
   takeable: true
   usable: true
   droppable: false
   type: "key"
-  unlocks: ["var_dungeon"]
+  unlocks: ["usr_lib_arcane"]
   consumable: true
   consumed_on_take: true
   on_take:
-    message: As you take the key, you feel a connection forming with the locked passage to the variable dungeon.
+    message: As you take the key, you feel a connection forming with the sealed library in /usr.
+  on_examine:
+    message: The key's arcane symbols resonate with the lock on /usr. In a real filesystem you would need the execute bit on a directory to enter it; this key is that bit, crystallised.
   on_use:
     message: The key glows with arcane energy, waiting to be used at the proper location.
-  on_examine:
-    message: The key's design suggests it's specifically crafted to access the variable dungeon area. The arcane symbols seem to resonate with the lock mechanism.
 
 master_key:
   name: Master Key
@@ -106,6 +106,9 @@ sudo_privileges_badge:
   rarity: unique
   persistence: "persistent"
   story_flag: "sudo_trial_complete"
+  # Device files are root's business: /dev stays sealed until the Sudo Trial is
+  # passed. This is the trial's mechanical payoff.
+  unlocks: ["dev_null_void"]
   special_effects:
     - type: "superuser_access"
       description: "Grants access to root-level commands and directories"

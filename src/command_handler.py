@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-import os
 import re
-import random
 from src import rng
 import logging
 from rich.text import Text
-from src.combat import combat_system, CombatSession
+from src.combat import CombatSession
 from src.commands import build_registry
 from src.events import event_bus, EventType
-from src.game_states import GameState
-from src.state_manager import state_manager
 from src.viewmodels.view_builder import ViewBuilder
 from utils.debug_tools import debug_log
-from utils.typewriter import TypewriterPresets, create_typewriter_output_func
 from utils.particle_animation import GameOverAnimation
 
 logger = logging.getLogger(__name__)
@@ -25,7 +20,7 @@ class CommandHandler:
 
         Phase 2b: the handler no longer holds a UI reference — it writes to
         ``self.output`` (a src.game_output.GameOutput). The engine drains it and
-        forwards to the real UI. See docs/REWRITE_PLAN.md.
+        forwards to the real UI.
         """
         debug_log("Initializing CommandHandler")
         self.player = player
@@ -412,8 +407,7 @@ class CommandHandler:
         if self._in_game_over_mode:
             result = self._handle_game_over_choice(command.strip())
             if result == "quit":
-                import sys
-                sys.exit(0)
+                event_bus.emit_event(EventType.GAME_QUIT, {}, "CommandHandler")
             elif result == "restart_from_save" or result == "start_new_game":
                 # Signal the game engine to restart
                 event_bus.emit_event(
@@ -856,7 +850,7 @@ class CommandHandler:
                 self.player.add_status_effect(effect_id, effect_data, effect_duration)
                 self.output.write(f"[bold]── Status Effect ──[/bold]\n[magenta]You gained the {effect_name} effect for {effect_duration} turns![/magenta]")
         else:
-            self._show_error(f"[red]You don't have the ability to learn this spell.[/red]")
+            self._show_error("[red]You don't have the ability to learn this spell.[/red]")
             
     def start_combat(self, enemies_queue):
         """
@@ -1044,7 +1038,7 @@ class CommandHandler:
 
         if not enemies_queue:
             debug_log(f"ERROR: No valid enemy data found for room {current_room}")
-            self.output.write(f"[bold red]System error: Cannot load enemy data[/bold red]")
+            self.output.write("[bold red]System error: Cannot load enemy data[/bold red]")
             return
 
         # Show detection message for first enemy
@@ -1078,6 +1072,16 @@ class CommandHandler:
 
         if "message" in effect:
             self.output.write(f"[italic cyan]{effect['message']}[/italic]")
+
+        if "story_flag" in effect:
+            # Learning something can open a path: a hidden room may declare a
+            # `discovery_requirement`, and `ls -a` only reveals it once the
+            # corresponding flag is set. This is the quiet setter — lore reads
+            # use _trigger_story_flag, which also announces and auto-saves.
+            flag = effect["story_flag"]
+            if not self.player.get_story_flag(flag):
+                self.player.set_story_flag(flag, True)
+                debug_log(f"Story flag '{flag}' set by effect")
         
         if "heal" in effect:
             amount = effect["heal"]
@@ -1166,8 +1170,6 @@ class CommandHandler:
                 from src.save import load_most_recent_save
                 save_data = load_most_recent_save()
                 if save_data:
-                    # Import GameEngine to restart properly
-                    from src.game_engine import GameEngine
                     self.output.write("[green]Backup found! Restoring system state...[/green]")
                     self._in_game_over_mode = False
                     # Signal to restart with save data
@@ -1480,7 +1482,12 @@ Not because you fixed them. Because you forgave them.
             self.output.write("[bold white]Please choose:[/bold white] [green]y[/green] (save & quit), [yellow]n[/yellow] (quit without saving), [red]c[/red] (cancel)")
 
     def _perform_quit(self):
-        """Actually quit the game."""
+        """Actually quit the game.
+
+        Emits GAME_QUIT rather than calling exit(): the domain layer must not
+        tear the process down from inside a Textual event handler, or the driver
+        never gets to restore the terminal. The UI decides how to stop itself.
+        """
         self.output.write("[yellow]Goodbye! Thanks for playing Haunted Terminal.[/yellow]")
         self.output.write("[dim]The system spirits fade back into the digital void...[/dim]")
-        exit(0) 
+        event_bus.emit_event(EventType.GAME_QUIT, {}, "CommandHandler")

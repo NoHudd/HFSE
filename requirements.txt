@@ -4,9 +4,9 @@ pyyaml>=6.0.1
 # code uses newer APIs (e.g. Input.Blurred). 8.2.8 verified working 2026-07-09.
 textual==8.2.8
 
-# Scene view (pixel-art sprites rendered as half-blocks) — docs/SCENE_VIEW_SPEC.md
+# Scene view: pixel-art sprites rendered as terminal half-blocks (src/scene/)
 rich-pixels>=3
 Pillow>=10
 
-# Rewrite engine (typed content schema) — see docs/REWRITE_PLAN.md
+# Typed content schema and validation (engine/)
 pydantic>=2

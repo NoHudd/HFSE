@@ -1,5 +1,10 @@
 # Sprite assets
 
+The pixel art in this directory — character sprites, enemies, NPCs, zone
+backdrops, menu art and the logo — is AI-generated, then hand-picked and
+resized for the game. It is distributed under the repository's MIT license
+along with everything else here.
+
 Drop PNGs here; the game picks them up by filename — no code changes.
 
 | Folder | Filename | Example |

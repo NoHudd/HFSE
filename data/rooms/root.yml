@@ -32,6 +32,6 @@ zone: core
 zone_level: 7
 requires_sudo: false  # Will be true after story progression
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/"
-aliases: ["/", "/root", "root"]
+aliases: ["/", "root"]

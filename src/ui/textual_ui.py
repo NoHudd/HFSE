@@ -13,17 +13,16 @@ Author: NoHudd
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Header, Footer, Static, Input, RichLog
+from textual.widgets import Footer, Static, Input
 from textual.containers import Container, VerticalScroll, Horizontal, Vertical
 from textual.reactive import var
-from textual.screen import ModalScreen
 from rich.text import Text
 
-from src.ui.ui_interface import UIProtocol, UIError, UIInitializationError, UIStateError
+from src.ui.ui_interface import UIInitializationError, UIStateError
 from src.events import event_bus, EventType
 from src.game_states import GameState, UIState
 from src.state_manager import state_manager
-from utils.typewriter import TypewriterPresets, create_typewriter_output_func, request_skip as request_typewriter_skip
+from utils.typewriter import TypewriterPresets, request_skip as request_typewriter_skip
 from config.dev_config import SKIP_INTRO
 
 from src.ui.panels.inventory_panel import InventoryPanel
@@ -31,6 +30,7 @@ from src.ui.panels.stats_panel import StatsPanel
 from src.ui.panels.scene_view import SceneView
 from src.ui.screens.combat_hint import CombatModeHintScreen
 from src.ui.screens.log_viewer import LogViewerScreen
+from src.ui.screens.quit_confirm import QuitConfirmScreen
 from src.ui.screens.selection_screen import SelectionCard, SelectionScreen
 from src.ui.screens.settings_screen import SettingsScreen
 from src.ui.command_suggester import CommandSuggester
@@ -39,8 +39,7 @@ from config.settings_manager import SettingsManager
 import logging
 import os
 import threading
-import time
-from typing import Dict, Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +50,11 @@ class TextualGameUI(App):
     CSS_PATH = os.path.join(os.path.dirname(__file__), "ui.css")
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
+        # Ctrl+Q and Ctrl+C both route through the same confirmation the `quit`
+        # command uses. Textual binds ctrl+q to an immediate exit by default,
+        # which silently discarded unsaved progress.
+        Binding("ctrl+q", "request_quit", "Quit", key_display="ctrl + q", priority=True),
+        Binding("ctrl+c", "request_quit", "Quit", show=False, priority=True),
         Binding("ctrl+p", "open_settings", "Settings", key_display="ctrl + p"),
         Binding("l", "toggle_log_viewer", "Show/Hide Logs", key_display="L"),
         Binding("f5", "restart_game", "Restart Game", key_display="F5"),
@@ -105,6 +109,8 @@ class TextualGameUI(App):
         (EventType.COMBAT_ENDED, "_on_combat_ended"),
         (EventType.ENEMY_DEFEATED, "_on_enemy_defeated"),
         (EventType.GAME_WON, "_on_game_won"),
+        (EventType.GAME_QUIT, "_on_game_quit"),
+        (EventType.QUIT_CONFIRM_REQUESTED, "_on_quit_confirm_requested"),
     ]
 
     def _setup_event_subscriptions(self):
@@ -277,10 +283,6 @@ class TextualGameUI(App):
         """Handle room entered event with enhanced theming."""
         if 'room' in event.data:
             self._room_view = event.data['room']
-            exits = self._room_view.get('exits', [])
-            enemies = self._room_view.get('enemies', [])
-            npcs = self._room_view.get('npcs', [])
-
             room_name = self._room_view.get('name', '')
             self._scene_view.show_explore(self._room_view)
 
@@ -604,6 +606,32 @@ class TextualGameUI(App):
     # =====================================
     # DEV TOOLS ACTIONS
     # =====================================
+
+    def action_request_quit(self) -> None:
+        """Ask the domain to quit, so the usual save prompt runs first."""
+        event_bus.emit_event(
+            EventType.COMMAND_ENTERED,
+            {"command": "quit", "game_state": state_manager.current_state},
+            "TextualGameUI",
+        )
+
+    def _on_quit_confirm_requested(self, event) -> None:
+        """Show the quit chooser instead of making the player type a letter."""
+        def answer(choice: str) -> None:
+            event_bus.emit_event(
+                EventType.COMMAND_ENTERED,
+                {"command": choice, "game_state": state_manager.current_state},
+                "QuitConfirmScreen",
+            )
+
+        # Deferred so the Enter/ESC that asked to quit cannot fall through onto
+        # the new screen's own bindings and answer it instantly.
+        self.call_after_refresh(self.push_screen, QuitConfirmScreen(answer))
+
+    def _on_game_quit(self, event) -> None:
+        """The domain confirmed the quit: stop the app so Textual restores the
+        terminal on the way out."""
+        self.exit()
 
     def action_open_settings(self) -> None:
         """Open the settings modal."""

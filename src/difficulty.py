@@ -3,8 +3,7 @@
 
 The player picks a mode (easy/medium/hard); multipliers live in
 data/difficulty.yaml (calibrated by the sim tuner). Applied at two seams:
-GameWorld.get_enemy (enemy stats) and combat XP award. See
-docs/DIFFICULTY_SIM_DESIGN.md.
+GameWorld.get_enemy (enemy stats) and combat XP award.
 """
 from __future__ import annotations
 

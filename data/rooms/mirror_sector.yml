@@ -50,6 +50,6 @@ victory_rewards:
 story_flags_on_victory:
   - sudo_trial_complete
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
-path: "/mirror"
-aliases: []
+# Navigation: canonical path + everything a player may type to get here.
+path: "/proc/self"
+aliases: ["/proc/self", "/mirror", "mirror"]

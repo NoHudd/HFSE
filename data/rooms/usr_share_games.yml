@@ -1,7 +1,7 @@
 name: The Game Gallery
 description: A dusty, neglected sector where ancient games are stored. Most are Permission Denied.
 detailed_description: |
-  /usr/share/games - The Game Gallery
+  /usr/games - The Game Gallery
 
   This forgotten corner of the filesystem holds the remnants of entertainment programs from the Before Times.
   ASCII art games, text adventures, fortune cookies - all gathering digital dust.
@@ -36,6 +36,6 @@ level_requirement: 15
 story_location: true
 easter_egg_zone: true
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
-path: "/usr/share/games"
-aliases: ["/usr/share", "/usr/share/games", "share", "games"]
+# Navigation: canonical path + everything a player may type to get here.
+path: "/usr/games"
+aliases: ["/usr/games", "/usr/share", "/usr/share/games", "share", "games"]

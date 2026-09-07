@@ -34,6 +34,6 @@ story_location: true
 story_beats:
   - identity_retrieval 
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/home"
-aliases: ["/home", "/home/grove", "home", "grove"]
+aliases: ["/home", "/home/lost+found", "/home/grove", "home", "grove"]

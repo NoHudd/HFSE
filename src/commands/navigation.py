@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Navigation commands: ls, cd.
 
-Bodies moved verbatim from CommandHandler (self -> ctx). ls now checks for the
--a flag anywhere in the arg list; cd resolves the destination from args[0]
-(room ids/aliases are single tokens). Shared helpers stay on the handler.
+The rooms form a real directory tree (see src/room_paths.py), so both verbs
+behave like their shell counterparts:
+
+- ``cd`` takes any absolute or relative path and understands ``.`` and ``..``.
+  It is not restricted to the room's exit list; what restricts you is
+  permission, on every ancestor directory as well as the destination.
+- ``ls`` lists the current directory's child directories alongside its files,
+  processes and hostiles. ``-a`` also shows ``.``, ``..`` and hidden children
+  (revealing them), and ``-l`` renders permissions in long format.
 """
 from __future__ import annotations
 
@@ -12,301 +18,110 @@ from typing import TYPE_CHECKING
 from rich.text import Text
 
 import config.dev_config as dev_cfg
+from src import room_paths
 from src.commands.base import Command
 from src.events import EventType, event_bus
-from src.room_paths import ROOM_ID_TO_PATH
 from src.viewmodels.view_builder import ViewBuilder
 from utils.debug_tools import debug_log
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.command_handler import CommandHandler
 
+HOME_PATH = "/home"
 
-class LsCommand(Command):
-    name = "ls"
 
-    def execute(self, ctx: "CommandHandler", args: list[str]) -> None:
-        room_id = ctx.player.current_room
-        output = Text()
-        has_content = False
-        show_hidden = "-a" in args
-        # In-game hints: inline "→ take/cat/talk/cd" affordances (Settings toggle,
-        # default on). Read live so the toggle takes effect immediately.
-        hints = getattr(dev_cfg, "SHOW_HINTS", True)
+# --- shared helpers ----------------------------------------------------------
 
-        has_enemies, enemy_output = ctx._check_enemies_blocking_exploration(room_id)
-        if has_enemies:
-            ctx.output.write(enemy_output)
-            return
 
-        items = ctx.world.get_items_in_room(room_id) or []
-        weapon_found = False
-        if items:
-            from src.rarity import RaritySystem
+def _unlock_with_held_key(ctx: "CommandHandler", room_id: str) -> bool:
+    """If the player carries the key for room_id, spend it: unlock and reveal.
 
-            output.append("Files:\n", style="bold green")
-            for item_id in items:
-                item = ctx.world.get_item(item_id)
-                description = ctx.get_formatted_item_description(item)
-                # Color the file by rarity so value reads at a glance. Common maps
-                # to white in the rarity system, which is invisible against the
-                # description text, so give commons a visible green; higher tiers
-                # keep their rarity color (rare=blue, legendary=yellow, unique=red).
-                rarity = item.get("rarity", "common") if item else "common"
-                item_color = RaritySystem.get_rarity_color(rarity)
-                if item_color in ("white", "bright_white", "default"):
-                    item_color = "green"
-                output.append(f"  {item_id}", style=f"bold {item_color}")
-                output.append(f" - {description}\n")
-                if hints:
-                    readable = (
-                        item and item.get("type") == "lore"
-                        and not item.get("takeable", True)
-                    )
-                    verb = "cat" if readable else "take"
-                    output.append(f"     → {verb} {item_id}\n", style="dim cyan")
+    Returns True if the room became accessible. Mirrors the long-standing
+    behaviour where walking into a door you have the key for just opens it.
+    """
+    state = ctx.world.get_room_state(room_id)
+    key_required = state.get("key_required")
+    if not key_required or not ctx.player.has_item(key_required):
+        return False
 
-                if item and item.get("type") == "weapon":
-                    weapon_found = True
+    key_item = ctx.player.get_item_from_inventory(key_required) or {}
+    unlocks = [
+        ctx.room_aliases.get(str(r).lower(), r) for r in key_item.get("unlocks", [])
+    ]
+    if room_id not in unlocks and not key_item.get("usable", False):
+        return False
 
-            has_content = True
+    ctx.world.discover_room(room_id)
+    ctx.world.unlock_room(room_id)
+    path = room_paths.room_path(room_id)
+    key_name = key_item.get("name", key_required)
+    ctx.output.write(
+        f"[yellow]The {key_name} fits. {path} unlocks.[/yellow]"
+    )
+    debug_log(f"{key_required} auto-unlocked {room_id}")
+    return True
 
-        npcs = ctx.world.get_npcs_in_room(room_id) or []
-        if npcs:
-            if has_content:
-                output.append("\n")
-            output.append("Processes:\n", style="bold yellow")
-            for npc_id in npcs:
-                npc = ctx.world.get_npc(npc_id)
-                if npc:
-                    description = (
-                        npc.get("short_description")
-                        or npc.get("description")
-                        or npc.get("name")
-                        or "No description available"
-                    )
-                    output.append(f"  {npc_id}", style="yellow")
-                    output.append(f" - {description}\n")
-                    if hints:
-                        output.append(f"     → talk {npc_id}\n", style="dim cyan")
-            has_content = True
 
-        enemies = ctx.world.get_enemies_in_room(room_id) or []
-        if enemies:
-            if has_content:
-                output.append("\n")
-            output.append("Corrupted Entities:\n", style="bold red")
-            for enemy_id in enemies:
-                enemy = ctx.world.get_enemy(enemy_id, ctx.player.player_class)
-                if enemy:
-                    name = enemy.get("name", enemy_id)
-                    health = enemy.get("health", "??")
-                    damage = enemy.get("damage", "??")
-                    output.append(f"  {enemy_id}", style="red")
-                    output.append(f" - {name} (HP: {health}, DMG: {damage})\n")
-                else:
-                    output.append(f"  {enemy_id} - Unknown Enemy\n", style="red")
-            has_content = True
-
-        discovered_any = False
-        if show_hidden:
-            hidden_rooms = ctx._get_discoverable_hidden_rooms(room_id)
-            if hidden_rooms:
-                if has_content:
-                    output.append("\n")
-                output.append(
-                    "Hidden Directories (discoverable):\n", style="bold yellow"
-                )
-                for hidden_room_id, hint in hidden_rooms.items():
-                    output.append(f"  .{hidden_room_id}", style="dim yellow")
-                    output.append(f" - {hint}\n", style="dim")
-                has_content = True
-
-                for hidden_room_id in hidden_rooms:
-                    if ctx.world.discover_room(hidden_room_id):
-                        discovered_any = True
-                        output.append(
-                            f"\n[bold green]Discovered hidden directory: "
-                            f"{hidden_room_id}![/bold green]\n"
-                        )
-
-        # Where you can go: actionable exit list (fills the screen with the one
-        # thing a novice most needs — how to leave). Hints-gated.
-        if hints:
-            exits = ctx.world.get_exits(room_id) or []
-            if exits:
-                if has_content:
-                    output.append("\n")
-                output.append("Where you can go:\n", style="bold cyan")
-                for exit_room in exits:
-                    # Show the filesystem path (cd /var) — matches the exits strip
-                    # and teaches real path navigation. Falls back to the room id.
-                    path = ROOM_ID_TO_PATH.get(exit_room, exit_room)
-                    marker = " ✓" if ctx.world.is_room_cleared(exit_room) else ""
-                    output.append(f"  → cd {path}{marker}\n", style="dim cyan")
-                has_content = True
-
-        if not has_content:
-            output.append("No files, processes, or entities found.")
-
-        ctx.output.write(output)
-
-        if discovered_any:
-            # The sidebar/scene only rebuilds on ROOM_ENTERED (normally fired
-            # by cd). Without this, a newly discovered exit stays invisible
-            # in the persistent UI until the player leaves and re-enters —
-            # the one-line "Discovered hidden directory!" text above is the
-            # only place it ever showed, and the next command overwrites it.
-            room_view = ViewBuilder.build_room_view(ctx.world, room_id)
-            event_bus.emit_event(
-                EventType.ROOM_ENTERED,
-                {"room": room_view.to_dict(), "player_name": ctx.player.name},
-                "CommandHandler",
-            )
-
-        ts = ctx.player.tutorial_state
-        if not ts.get("completed", False):
-            if not ts.get("first_ls", False):
-                ts["first_ls"] = True
-                if weapon_found:
-                    ts["found_weapon"] = True
-                    weapon_item_id = None
-                    for item_id in items:
-                        item = ctx.world.get_item(item_id)
-                        if item and item.get("type") == "weapon":
-                            weapon_item_id = item_id
-                            break
-                    ctx.show_tutorial_hint("step2", weapon_item_id)
-            elif ts.get("combat_action_taken", False) and not ts.get("navigation_ls", False):
-                ts["navigation_ls"] = True
-                ctx.show_tutorial_hint("step6b")
+def _permission_bits(ctx: "CommandHandler", room_id: str) -> str:
+    """Long-format permission column for a child directory."""
+    allowed, denial = ctx.world.check_access(room_id, ctx.player)
+    if allowed:
+        return "drwxr-xr-x"
+    if denial and denial["reason"] == "class":
+        return "dr-x------"
+    return "dr--------"
 
 
 class CdCommand(Command):
     name = "cd"
 
     def execute(self, ctx: "CommandHandler", args: list[str]) -> None:
-        directory = args[0] if args else ""
-        if not directory:
-            debug_log("cd called with no directory specified")
-            ctx.output.write(
-                f"Current directory: [bold]{ctx.player.current_room}[/bold]"
-            )
-            return
-
-        original_directory = directory
-        if directory.lower() in ctx.room_aliases:
-            directory = ctx.room_aliases[directory.lower()]
-            debug_log(f"Resolved alias '{original_directory}' to '{directory}'")
-
         current_room = ctx.player.current_room
-        debug_log(f"Player attempting to move from {current_room} to {directory}")
+        current_path = room_paths.room_path(current_room)
 
-        can_move, reason = ctx.world.can_move_to(current_room, directory)
-        debug_log(f"Can move to {directory}: {can_move}, reason: {reason}")
+        # Bare `cd` goes home, exactly like a shell with $HOME set.
+        typed = args[0] if args else HOME_PATH
 
-        room_state = ctx.world.get_room_state(directory)
-        if room_state.get("hidden", False):
-            # A key that explicitly unlocks this room also REVEALS it — otherwise
-            # a keyed player is told the path doesn't exist (mage with opt_key
-            # locked out of the mage tower).
-            key_required = room_state.get("key_required")
-            key_item = (
-                ctx.player.get_item_from_inventory(key_required)
-                if key_required and ctx.player.has_item(key_required)
-                else None
+        target = room_paths.resolve(typed, current_path, ctx.room_aliases)
+        if target is None:
+            ctx._show_error(
+                f"[bold red]cd: {typed}: No such file or directory[/bold red]"
             )
-            resolved_unlocks = [
-                ctx.room_aliases.get(r.lower(), r)
-                for r in (key_item or {}).get("unlocks", [])
-            ]
-            if key_item and directory in resolved_unlocks:
-                debug_log(f"Hidden room {directory} revealed by key {key_required}")
-                ctx.world.discover_room(directory)
-                key_name = key_item.get("name", key_required)
-                ctx.output.write(
-                    f"[yellow]✨ The {key_name} resonates — a hidden path to "
-                    f"{directory} reveals itself.[/yellow]"
-                )
-                can_move, reason = ctx.world.can_move_to(current_room, directory)
-            else:
-                debug_log(f"Attempt to access hidden room {directory} - access denied")
-                hint_message = ctx._get_hidden_room_hint(directory)
-                ctx._show_error("[bold red]That path doesn't appear to exist.[/bold red]")
-                if hint_message:
-                    ctx.output.write(f"[dim yellow]{hint_message}[/dim yellow]")
-                return
-
-        if not can_move and "locked" in reason.lower():
-            room_state = ctx.world.get_room_state(directory)
-            key_required = room_state.get("key_required")
-            debug_log(f"Room {directory} is locked, key required: {key_required}")
-
-            if key_required and ctx.player.has_item(key_required):
-                debug_log(f"Player has the required key: {key_required}")
-                key_item = ctx.player.get_item_from_inventory(key_required)
-
-                resolved_unlocks = [
-                    ctx.room_aliases.get(r.lower(), r)
-                    for r in key_item.get("unlocks", [])
-                ]
-                if "unlocks" in key_item and directory in resolved_unlocks:
-                    debug_log(f"Using key {key_required} to unlock {directory} (new format)")
-                    ctx.world.unlock_room(directory)
-                    ctx.output.write(
-                        f"[yellow]You automatically use {key_required} to unlock "
-                        f"{directory}.[/yellow]"
-                    )
-                    can_move = True
-                    reason = None
-                elif key_item.get("usable", False):
-                    debug_log(f"Using key {key_required} to unlock {directory} (old format)")
-                    ctx.world.unlock_room(directory)
-                    ctx.output.write(
-                        f"[yellow]You automatically use {key_required} to unlock "
-                        f"{directory}.[/yellow]"
-                    )
-                    can_move = True
-                    reason = None
-
-        if not can_move:
-            debug_log(f"Movement denied: {reason}")
-            ctx._show_error(f"[bold red]{reason}[/bold red]")
-
-            if "locked" in reason.lower():
-                room_state = ctx.world.get_room_state(directory)
-                key_required = room_state.get("key_required") if room_state else None
-                class_restriction = (
-                    room_state.get("class_restriction") if room_state else None
-                )
-
-                if key_required:
-                    ctx.output.write(
-                        f"[yellow]💡 Hint: This area requires '{key_required}' to "
-                        "unlock.[/yellow]"
-                    )
-                if class_restriction:
-                    ctx.output.write(
-                        f"[cyan]⚔ Class Restriction: Only {class_restriction}s can "
-                        "enter this area.[/cyan]"
-                    )
             return
 
-        debug_log(f"Moving player from {current_room} to {directory}")
-        ctx.player.move_to(directory)
+        if target == current_room:
+            ctx.output.write(f"You are already in [bold]{current_path}[/bold].")
+            return
 
-        new_room = ctx.world.get_room(directory)
-        room_name = new_room.name if new_room else directory
-        ctx.output.write(f"[bold cyan]Entering {room_name}...[/bold cyan]")
-        debug_log(f"Successfully moved player to {directory}")
+        # Try the key in every sealed door along the way before reporting failure.
+        # A key both reveals and unlocks: a player holding the opt_key should not
+        # be told the mage tower does not exist.
+        allowed, denial = ctx.world.check_access(target, ctx.player)
+        while not allowed and denial and denial["reason"] in ("locked", "missing"):
+            if not _unlock_with_held_key(ctx, denial["room_id"]):
+                break
+            allowed, denial = ctx.world.check_access(target, ctx.player)
 
-        room_view = ViewBuilder.build_room_view(ctx.world, directory)
+        if not allowed:
+            self._deny(ctx, typed, denial)
+            return
+
+        destination_path = room_paths.room_path(target)
+        debug_log(f"Moving player from {current_path} to {destination_path}")
+        ctx.player.move_to(target)
+
+        room = ctx.world.get_room(target)
+        room_name = room.name if room else target
+        ctx.output.write(
+            f"[bold cyan]{destination_path}[/bold cyan] — entering {room_name}..."
+        )
+
+        room_view = ViewBuilder.build_room_view(ctx.world, target)
         event_bus.emit_event(
             EventType.ROOM_ENTERED,
             {"room": room_view.to_dict(), "player_name": ctx.player.name},
             "CommandHandler",
         )
-
         ctx.display_location()
 
         ts = ctx.player.tutorial_state
@@ -314,3 +129,273 @@ class CdCommand(Command):
             if not ts.get("navigation_moved", False):
                 ts["navigation_moved"] = True
                 ctx.show_tutorial_hint("completed")
+
+    @staticmethod
+    def _deny(ctx: "CommandHandler", typed: str, denial: dict | None) -> None:
+        """Report a refused cd the way a shell would, then say what would help."""
+        if not denial:
+            ctx._show_error(f"[bold red]cd: {typed}: Permission denied[/bold red]")
+            return
+
+        path = denial["path"]
+
+        if denial["reason"] == "missing":
+            # An undiscovered directory is indistinguishable from one that isn't
+            # there — which is exactly what makes `ls -a` worth learning.
+            ctx._show_error(
+                f"[bold red]cd: {typed}: No such file or directory[/bold red]"
+            )
+            return
+
+        if denial["reason"] == "class":
+            ctx._show_error(f"[bold red]cd: {path}: Permission denied[/bold red]")
+            ctx.output.write(
+                f"[cyan]⚔ Only {denial['class_restriction']} spirits may enter "
+                f"{path}.[/cyan]"
+            )
+            return
+
+        ctx._show_error(f"[bold red]cd: {path}: Permission denied[/bold red]")
+        key_required = denial["key_required"]
+        blocked_ancestor = room_paths.normalize(typed) != path and not typed.startswith("-")
+        if key_required:
+            ctx.output.write(
+                f"[yellow]💡 You need '{key_required}' to traverse {path}."
+                "[/yellow]"
+            )
+        else:
+            ctx.output.write(f"[yellow]💡 {path} is sealed.[/yellow]")
+        if blocked_ancestor:
+            ctx.output.write(
+                f"[dim]{path} is on the way to {typed} — a directory can only be "
+                "entered through its parents.[/dim]"
+            )
+
+
+class LsCommand(Command):
+    name = "ls"
+
+    def execute(self, ctx: "CommandHandler", args: list[str]) -> None:
+        room_id = ctx.player.current_room
+        flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
+        show_all = "a" in flags
+        long_format = "l" in flags
+
+        output = Text()
+        has_content = False
+        hints = getattr(dev_cfg, "SHOW_HINTS", True)
+
+        has_enemies, enemy_output = ctx._check_enemies_blocking_exploration(room_id)
+        if has_enemies:
+            ctx.output.write(enemy_output)
+            return
+
+        revealed = self._render_directories(
+            ctx, output, room_id, show_all, long_format
+        )
+        has_content = has_content or bool(output)
+
+        items = ctx.world.get_items_in_room(room_id) or []
+        weapon_found, weapon_id = self._render_items(
+            ctx, output, items, hints, long_format, has_content
+        )
+        has_content = has_content or bool(items)
+
+        npcs = ctx.world.get_npcs_in_room(room_id) or []
+        self._render_npcs(ctx, output, npcs, hints, has_content)
+        has_content = has_content or bool(npcs)
+
+        enemies = ctx.world.get_enemies_in_room(room_id) or []
+        self._render_enemies(ctx, output, enemies, has_content)
+        has_content = has_content or bool(enemies)
+
+        if not has_content:
+            output.append("No files, processes, or entities found.")
+
+        ctx.output.write(output)
+
+        if revealed:
+            # The sidebar and scene only rebuild on ROOM_ENTERED. Without this a
+            # newly revealed directory stays invisible in the persistent UI until
+            # the player leaves and comes back.
+            room_view = ViewBuilder.build_room_view(ctx.world, room_id)
+            event_bus.emit_event(
+                EventType.ROOM_ENTERED,
+                {"room": room_view.to_dict(), "player_name": ctx.player.name},
+                "CommandHandler",
+            )
+
+        self._advance_tutorial(ctx, weapon_found, weapon_id)
+
+    # -- sections -------------------------------------------------------------
+
+    @staticmethod
+    def _may_discover(ctx: "CommandHandler", room_id: str) -> bool:
+        """Whether `ls -a` is allowed to reveal this hidden room yet.
+
+        A room may declare a `discovery_requirement`: a story flag the player
+        must hold before the directory shows up at all. It exists so a room the
+        player is not ready for cannot be stumbled into — /proc/self is the Sudo
+        Trial, an unfleeable boss, and it stays invisible until something in the
+        world has actually told you the trial is there.
+        """
+        room = ctx.world.get_room(room_id)
+        requirement = getattr(room, "discovery_requirement", None) if room else None
+        if not requirement:
+            return True
+        return bool(ctx.player.get_story_flag(requirement))
+
+    def _render_directories(
+        self, ctx: "CommandHandler", output: Text, room_id: str,
+        show_all: bool, long_format: bool,
+    ) -> list[str]:
+        """List child directories. With -a, also reveal and show hidden ones."""
+        here = room_paths.room_path(room_id)
+        children = room_paths.children_of(here)
+
+        revealed: list[str] = []
+        visible: list[str] = []
+        for child in children:
+            if ctx.world.is_discovered(child):
+                visible.append(child)
+            elif show_all and self._may_discover(ctx, child):
+                if ctx.world.discover_room(child):
+                    revealed.append(child)
+                visible.append(child)
+
+        if not visible and not show_all:
+            return revealed
+
+        output.append("Directories:\n", style="bold blue")
+
+        if show_all:
+            for dot in (".", ".."):
+                if long_format:
+                    output.append(f"  drwxr-xr-x  {dot}\n", style="dim")
+                else:
+                    output.append(f"  {dot}/\n", style="dim")
+
+        for child in visible:
+            path = room_paths.room_path(child)
+            name = room_paths.basename(path)
+            room = ctx.world.get_room(child)
+            label = room.name if room else child
+            style = "blue" if ctx.world.check_access(child, ctx.player)[0] else "dim"
+            cleared = " ✓" if ctx.world.is_room_cleared(child) else ""
+            if long_format:
+                output.append(f"  {_permission_bits(ctx, child)}  ", style="dim")
+                output.append(f"{name}/", style=f"bold {style}")
+                output.append(f"  {label}{cleared}\n")
+            else:
+                output.append(f"  {name}/", style=f"bold {style}")
+                output.append(f" - {label}{cleared}\n")
+
+        for child in revealed:
+            path = room_paths.room_path(child)
+            output.append(
+                f"\n✨ Revealed hidden directory: {path}\n", style="bold green"
+            )
+        return revealed
+
+    def _render_items(
+        self, ctx: "CommandHandler", output: Text, items: list[str],
+        hints: bool, long_format: bool, has_content: bool,
+    ) -> tuple[bool, str | None]:
+        if not items:
+            return False, None
+        from src.rarity import RaritySystem
+
+        if has_content:
+            output.append("\n")
+        output.append("Files:\n", style="bold green")
+
+        weapon_found = False
+        weapon_id = None
+        for item_id in items:
+            item = ctx.world.get_item(item_id)
+            description = ctx.get_formatted_item_description(item)
+            # Colour the file by rarity so value reads at a glance. Common maps to
+            # white, invisible against the description, so commons get green.
+            rarity = item.get("rarity", "common") if item else "common"
+            item_color = RaritySystem.get_rarity_color(rarity)
+            if item_color in ("white", "bright_white", "default"):
+                item_color = "green"
+            if long_format:
+                output.append("  -rw-r--r--  ", style="dim")
+            else:
+                output.append("  ")
+            output.append(f"{item_id}", style=f"bold {item_color}")
+            output.append(f" - {description}\n")
+            if hints:
+                readable = (
+                    item and item.get("type") == "lore"
+                    and not item.get("takeable", True)
+                )
+                verb = "cat" if readable else "take"
+                output.append(f"     → {verb} {item_id}\n", style="dim cyan")
+
+            if item and item.get("type") == "weapon" and not weapon_found:
+                weapon_found = True
+                weapon_id = item_id
+        return weapon_found, weapon_id
+
+    @staticmethod
+    def _render_npcs(
+        ctx: "CommandHandler", output: Text, npcs: list[str],
+        hints: bool, has_content: bool,
+    ) -> None:
+        if not npcs:
+            return
+        if has_content:
+            output.append("\n")
+        output.append("Processes:\n", style="bold yellow")
+        for npc_id in npcs:
+            npc = ctx.world.get_npc(npc_id)
+            if not npc:
+                continue
+            description = (
+                npc.get("short_description")
+                or npc.get("description")
+                or npc.get("name")
+                or "No description available"
+            )
+            output.append(f"  {npc_id}", style="yellow")
+            output.append(f" - {description}\n")
+            if hints:
+                output.append(f"     → talk {npc_id}\n", style="dim cyan")
+
+    @staticmethod
+    def _render_enemies(
+        ctx: "CommandHandler", output: Text, enemies: list[str], has_content: bool,
+    ) -> None:
+        if not enemies:
+            return
+        if has_content:
+            output.append("\n")
+        output.append("Corrupted Entities:\n", style="bold red")
+        for enemy_id in enemies:
+            enemy = ctx.world.get_enemy(enemy_id, ctx.player.player_class)
+            if enemy:
+                name = enemy.get("name", enemy_id)
+                health = enemy.get("health", "??")
+                damage = enemy.get("damage", "??")
+                output.append(f"  {enemy_id}", style="red")
+                output.append(f" - {name} (HP: {health}, DMG: {damage})\n")
+            else:
+                output.append(f"  {enemy_id} - Unknown Enemy\n", style="red")
+
+    @staticmethod
+    def _advance_tutorial(
+        ctx: "CommandHandler", weapon_found: bool, weapon_id: str | None,
+    ) -> None:
+        ts = ctx.player.tutorial_state
+        if ts.get("completed", False):
+            return
+        if not ts.get("first_ls", False):
+            ts["first_ls"] = True
+            if weapon_found:
+                ts["found_weapon"] = True
+                ctx.show_tutorial_hint("step2", weapon_id)
+        elif ts.get("combat_action_taken", False) and not ts.get("navigation_ls", False):
+            ts["navigation_ls"] = True
+            ctx.show_tutorial_hint("step6b")

@@ -4,7 +4,6 @@ Development configuration for HFSE game
 Simplified configuration that imports from settings.py
 """
 
-import os
 
 # Import all settings from the settings module
 try:
@@ -22,10 +21,11 @@ try:
         DEBUG_LOG_FILE
     )
 except ImportError:
-    # Fallback to defaults if settings.py doesn't exist
-    print("Warning: config/settings.py not found. Using default settings.")
-    print("Copy config/settings.example.py to config/settings.py to customize.")
-
+    # No settings.py: use player defaults. Deliberately silent — this is the
+    # normal case for anyone who installed by hand rather than via the launcher,
+    # and printing to stdout here scribbles on the terminal right before the TUI
+    # takes it over. Contributors who want the dev flags copy
+    # config/settings.example.py to config/settings.py (see REFERENCE.md).
     DEV_MODE = False
     DEBUG_MODE = False
     DEBUG_COMMAND = False

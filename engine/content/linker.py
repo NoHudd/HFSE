@@ -89,6 +89,48 @@ def find_nav_problems(content: GameContent) -> list[str]:
     return problems
 
 
+def _parent_of(path: str) -> str:
+    """Containing directory of a canonical room path; the root is its own parent."""
+    if path == "/":
+        return "/"
+    head = path.rsplit("/", 1)[0]
+    return head or "/"
+
+
+def find_tree_problems(content: GameContent) -> list[str]:
+    """Directory-tree integrity (empty == clean).
+
+    Rooms form a real filesystem tree, and ``cd`` does path arithmetic over it:
+    ``cd ..`` walks to the parent, and entering a room requires permission on
+    every ancestor. Both break if a room's parent path is not itself a room, so a
+    gap here is fatal rather than cosmetic.
+    """
+    problems: list[str] = []
+    by_path: dict[str, str] = {}
+    for rid, room in content.rooms.items():
+        if room.path:
+            by_path[room.path] = str(rid)
+
+    if "/" not in by_path:
+        problems.append("no room owns the root path '/'")
+
+    for rid, room in content.rooms.items():
+        if not room.path:
+            continue  # missing-path is reported by find_nav_problems
+        if not room.path.startswith("/"):
+            problems.append(f"room '{rid}': path '{room.path}' is not absolute")
+            continue
+        if room.path == "/":
+            continue
+        parent = _parent_of(room.path)
+        if parent not in by_path:
+            problems.append(
+                f"room '{rid}': path '{room.path}' has no parent directory — "
+                f"nothing owns '{parent}'"
+            )
+    return problems
+
+
 def find_reference_warnings(content: GameContent) -> list[str]:
     """Advisory dangling references (empty == clean).
 
@@ -115,7 +157,11 @@ def find_reference_warnings(content: GameContent) -> list[str]:
 
 def link(content: GameContent) -> GameContent:
     """Enforce load-bearing referential integrity; raise on any dangling ref."""
-    problems = find_broken_references(content) + find_nav_problems(content)
+    problems = (
+        find_broken_references(content)
+        + find_nav_problems(content)
+        + find_tree_problems(content)
+    )
     if problems:
         raise DanglingReferenceError(
             f"{len(problems)} content problem(s):\n  - "
@@ -130,7 +176,7 @@ DIALOGUE_WHEN_KEYS = {"story_flag", "not_story_flag", "has_item", "first_meeting
 def find_dialogue_problems(content: GameContent) -> list[str]:
     """Dangling dialogue-rule references: every rule bank must exist as a
     non-empty list of strings in that NPC's dialogue mapping, and every `when`
-    key must be from the known vocabulary (docs/NPC_DIALOGUE_SPEC.md)."""
+    key must be from the known vocabulary (see DIALOGUE_WHEN_KEYS below)."""
     problems: list[str] = []
     for npc_id, npc in content.npcs.items():
         rules = npc.dialogue_rules

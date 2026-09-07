@@ -12,7 +12,6 @@ This is a refactored version of the game engine with:
 
 import os
 import sys
-import yaml
 import logging
 from typing import Optional, Dict, Any
 
@@ -22,15 +21,12 @@ from src.player import Player
 from src.command_handler import CommandHandler
 from src.game_output import GameOutput
 from src.save import save_manager
-from src.ui.ui_interface import UIProtocol, UIError, UIInitializationError
+from src.ui.ui_interface import UIProtocol, UIInitializationError
 from src.events import event_bus, EventType
 from src.game_states import GameState, DEFAULT_GAME_STATE, DEFAULT_ROOM
-from src.data_loader import load_room_data, load_enemy_data
+from src.data_loader import load_room_data, load_enemy_data, load_npc_data
 from src.state_manager import state_manager
 from src.viewmodels.view_builder import ViewBuilder
-
-# Import debug tools
-from utils.debug_tools import debug_log
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +83,13 @@ class ImprovedGameEngine:
         """Initialize/reinitialize game components (reloadable)."""
         logger.info("Initializing game components")
 
+        # Drop the outgoing handler's subscriptions before letting go of it.
+        # Without this, F5 (restart) left the dead run's CommandHandler on the
+        # bus: ROOM_ENTERED then fired check_for_enemies twice (every enemy
+        # fought twice) and ENEMY_DEFEATED fired twice (loot rolled twice).
+        if getattr(self, "cmd_handler", None):
+            self.cmd_handler.cleanup_event_subscriptions()
+
         # Reset game state
         self.player: Optional[Player] = None
         self.world: Optional[GameWorld] = None
@@ -136,74 +139,32 @@ class ImprovedGameEngine:
 
         logger.info("Game restart complete")
 
-    def _load_game_data(self):
-        """Load all game data from YAML files."""
-        logger.info("Loading game data")
-        
-        # Load data using centralized data_loader functions
-        rooms = load_room_data()
-        enemies = load_enemy_data()
-        
-        # Load other data with existing methods
-        items = self._load_items()
-        npcs = self._load_data_from_dir('data/npcs', 'npcs')
-        
-        # Create world
-        self.world = GameWorld(rooms, items, enemies, npcs)
-        logger.info(f"Loaded {len(rooms)} rooms, {len(items)} items, {len(enemies)} enemies, {len(npcs)} NPCs")
+    def _load_content(self):
+        """Load every content collection from data/ (rooms, items, enemies, npcs)."""
+        return (
+            load_room_data(),
+            self._load_items(),
+            load_enemy_data(),
+            load_npc_data(),
+        )
 
-        # Validate cross-file references at startup
-    
+    def _load_game_data(self):
+        """Load all game data and build a freshly-initialized world."""
+        logger.info("Loading game data")
+        rooms, items, enemies, npcs = self._load_content()
+        self.world = GameWorld(rooms, items, enemies, npcs)
+        logger.info(
+            f"Loaded {len(rooms)} rooms, {len(items)} items, "
+            f"{len(enemies)} enemies, {len(npcs)} NPCs"
+        )
+
     def _load_game_data_for_load(self):
-        """Load game data when loading a saved game - skip world state initialization."""
+        """Load game data for a save game — world state comes from the save."""
         logger.info("Loading game data for save game")
-        
-        # Load data using centralized data_loader functions
-        rooms = load_room_data()
-        enemies = load_enemy_data()
-        
-        # Load other data with existing methods
-        items = self._load_items()
-        npcs = self._load_data_from_dir('data/npcs', 'npcs')
-        
-        # Create game world without initializing state (will be loaded from save)
+        rooms, items, enemies, npcs = self._load_content()
         self.world = GameWorld(rooms, items, enemies, npcs, initialize_state=False)
-        
         logger.info("Game data loaded successfully for save game")
-    
-    def _load_data_from_dir(self, directory: str, category_key: str) -> Dict[str, Any]:
-        """Generic data loader for enemies and NPCs."""
-        data_map = {}
-        
-        if not os.path.exists(directory):
-            logger.warning(f"Directory {directory} does not exist")
-            return data_map
-            
-        try:
-            for filename in os.listdir(directory):
-                if filename.endswith(('.yaml', '.yml')):
-                    filepath = os.path.join(directory, filename)
-                    with open(filepath, 'r') as file:
-                        data = yaml.safe_load(file)
-                        if data:
-                            # Check if this is a nested structure (old format) or flat structure (new format)
-                            if category_key in data:
-                                # Old nested format: enemies: { enemy_id: { ... } }
-                                for key, value in data.get(category_key, {}).items():
-                                    value['id'] = key
-                                    data_map[key] = value
-                            else:
-                                # New flat format: individual files with direct properties
-                                # Use filename (without extension) as the ID
-                                entity_id = os.path.splitext(filename)[0]
-                                data['id'] = entity_id
-                                data_map[entity_id] = data
-                                
-        except Exception as e:
-            logger.error(f"Error loading data from {directory}: {e}")
-            
-        return data_map
-    
+
     def _load_items(self) -> Dict[str, Any]:
         """Load all items as typed engine Item models (id -> model), validated at load.
 
@@ -216,9 +177,7 @@ class ImprovedGameEngine:
         logger.info(f"Total items loaded: {len(items)}")
         return items
 
-        logger.info(f"Total items loaded: {len(items)}")
-        return items
-    
+
     # Event handlers
     def _on_command_entered(self, event):
         """Handle command entered from UI."""
@@ -364,9 +323,8 @@ class ImprovedGameEngine:
         
         if action == "quit":
             logger.info("Player chose to quit")
-            self.cleanup()
-            import sys
-            sys.exit(0)
+            self._cleanup()
+            event_bus.emit_event(EventType.GAME_QUIT, {}, "ImprovedGameEngine")
             
         elif action == "start_new_game":
             # Full setup flow: a new run re-offers difficulty + class (the old
@@ -479,16 +437,15 @@ class ImprovedGameEngine:
         elif command == "2":
             # Load Game
             self._load_game()
-        elif command == "3" or command.lower() == "exit":
-            # Exit
+        elif command == "3" or command.lower() in ("exit", "quit"):
+            # Exit. `quit` is accepted here too: the title screen tells players
+            # "esc to quit", and ESC emits exactly that command.
             self.ui.update_output("Goodbye!")
-            import sys
-            sys.exit(0)
+            event_bus.emit_event(EventType.GAME_QUIT, {}, "ImprovedGameEngine")
         else:
             self.ui.update_output(f"[bold red]Invalid choice: {command}. Please enter 1, 2, or 3.[/bold red]\n")
-            # Re-show the title screen to help the player
-            import time
-            time.sleep(1)  # Brief pause before re-displaying
+            # Re-show the title screen to help the player. No sleep here: this
+            # runs on the UI thread, so a pause freezes the whole app.
             if hasattr(self.ui, '_display_title_screen'):
                 self.ui._display_title_screen()
             else:
@@ -517,9 +474,6 @@ class ImprovedGameEngine:
             logger.debug(f"Found {len(save_files)} save files")
             if not save_files:
                 self.ui.update_output("[bold yellow]No save files found. Starting new game instead...[/bold yellow]\n")
-                # Give user a moment to see the message
-                import time
-                time.sleep(1)
                 self._start_new_game()
                 return
             
@@ -1040,49 +994,26 @@ def main(ui):
     root_logger.addHandler(file_handler)
     root_logger.setLevel(logging.INFO)
 
+    # Ctrl+C is handled inside the app: Textual binds it (and Ctrl+Q) to the
+    # game's own quit confirmation, so the interrupt never reaches this frame.
+    # The old KeyboardInterrupt branch here offered a save via input() — which
+    # would have fought the TUI for stdin and printed raw Rich markup — and was
+    # unreachable in practice.
     try:
         engine = ImprovedGameEngine(ui=ui)
         engine.run()
-        
-    except KeyboardInterrupt:
-        logger.info("Game interrupted by user (Ctrl+C)")
-        print("\n[yellow]Game interrupted![/yellow]")
-        
-        # Try to offer saving before exit if game is running
-        try:
-            if hasattr(engine, 'cmd_handler') and engine.cmd_handler and hasattr(engine, 'player') and engine.player:
-                print("[bold yellow]You have unsaved progress![/bold yellow]")
-                print("Would you like to save before quitting? (y/n): ", end='')
-                import sys
-                choice = input().lower().strip()
-                
-                if choice == 'y':
-                    from src.save import save_manager
-                    world_state = engine.world.get_state() if hasattr(engine, 'world') else {}
-                    save_path = save_manager.save_game(engine.player, world_state)
-                    print(f"[green]Game saved to: {save_path}[/green]")
-                    
-        except Exception as save_error:
-            logger.error(f"Failed to save on interrupt: {save_error}")
-            print("[red]Failed to save game[/red]")
-            
-        print("[yellow]Goodbye! Thanks for playing Haunted Terminal.[/yellow]")
-        sys.exit(0)
-        
+
     except DataLoadError as e:
         logger.error(f"Data loading failed: {e}")
         print(f"Error: Could not load game data - {e}")
         sys.exit(1)
-        
+
     except GameEngineError as e:
         logger.error(f"Game engine error: {e}")
         print(f"Error: Game engine failed - {e}")
         sys.exit(1)
-        
+
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         print(f"Unexpected error: {e}")
         sys.exit(1)
-
-if __name__ == "__main__":
-    main()

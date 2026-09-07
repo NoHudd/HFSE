@@ -1,7 +1,7 @@
 name: Permission Denied
 short_description: A manifestation of access control itself - a guardian process that refuses entry.
 description: |
-  In /usr/share/games, where ancient entertainment programs gather dust under locked permissions,
+  In /usr/games, where ancient entertainment programs gather dust under locked permissions,
   the concept of "Permission Denied" has become sentient. This entity is the error made flesh -
   a bureaucratic daemon that blocks all access and delights in doing so.
 

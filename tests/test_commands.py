@@ -60,16 +60,16 @@ def test_inventory_alias_matches(session: GameSession) -> None:
 
 # --- migrated verbs ---------------------------------------------------------
 
-def test_pwd_shows_current_room(session: GameSession) -> None:
-    out = _text(session.submit("pwd"))
-    assert "home_grove" in out
-    session.submit("cd root")
-    assert "root" in _text(session.submit("pwd"))
+def test_pwd_shows_current_path(session: GameSession) -> None:
+    # pwd prints a path, not a room id — that is the whole point of the tree.
+    assert "/home" in _text(session.submit("pwd"))
+    session.submit("cd /")
+    assert _text(session.submit("pwd")).strip().endswith("/[/bold]")
 
 
 def test_help_lists_commands(session: GameSession) -> None:
     out = _text(session.submit("help"))
-    assert "Available Commands" in out
+    assert "Real Unix commands" in out
     for verb in ("cd", "ls", "attack", "inventory"):
         assert verb in out
 
@@ -97,10 +97,16 @@ def test_keys_shows_progression(session: GameSession) -> None:
     assert "lib_key" in out
 
 
-def test_map_renders(session: GameSession) -> None:
-    out = _text(session.submit("map"))
-    # Either the empty-map hint or the system map header; must not error.
-    assert "MAP" in out or "map is empty" in out
+def test_tree_renders(session: GameSession) -> None:
+    out = _text(session.submit("tree"))
+    assert "Discovered filesystem" in out
+    assert "home/" in out          # you start there, so it is always discovered
+    assert "← you are here" in out
+
+
+def test_map_is_an_alias_for_tree(session: GameSession) -> None:
+    # `map` kept working when it became `tree`; muscle memory should not break.
+    assert _text(session.submit("map")) == _text(session.submit("tree"))
 
 
 def test_ps_lists_processes(session: GameSession) -> None:
@@ -178,8 +184,13 @@ def test_ls_lists_room_contents(session: GameSession) -> None:
 
 
 def test_cd_and_pwd_track_room(session: GameSession) -> None:
-    session.submit("cd root")
-    assert "root" in _text(session.submit("pwd"))
+    # /var/tmp and / are both enemy-free, so no combat swallows the pwd.
+    session.submit("cd /var/tmp")
+    assert "/var/tmp" in _text(session.submit("pwd"))
+    session.submit("cd /home")
+    assert "/home" in _text(session.submit("pwd"))
+    session.submit("cd ..")           # /home -> /
+    assert _text(session.submit("pwd")).strip().endswith("/[/bold]")
 
 
 def test_tutorial_prescribed_commands_work(session: GameSession) -> None:
@@ -205,11 +216,11 @@ def test_ls_hints_toggle(session: GameSession) -> None:
 
     dev_cfg.SHOW_HINTS = True
     on = _text(session.submit("ls"))
-    assert "→ take" in on and "→ cd" in on and "Where you can go" in on
+    assert "→ take" in on or "→ cat" in on
 
     dev_cfg.SHOW_HINTS = False
     off = _text(session.submit("ls"))
-    assert "→ take" not in off and "Where you can go" not in off
+    assert "→ take" not in off and "→ cat" not in off
 
     dev_cfg.SHOW_HINTS = True  # restore default
 

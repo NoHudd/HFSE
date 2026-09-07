@@ -3,43 +3,62 @@ import os
 import json
 import time
 import logging
-from src.events import event_bus, EventType
 
 logger = logging.getLogger(__name__)
 
-# Current on-disk save format version. Bump when the save schema changes and add
-# a migration step in _migrate_save so old saves keep loading (Phase 4a).
-SAVE_VERSION = 2
+# Current on-disk save format version.
+SAVE_VERSION = 3
 
-# Autosaves fire on every room move; without a cap the pool grows unbounded and
-# every save/list operation slows with directory size (observed: 16k files).
+# Saves older than this cannot be loaded. v2 and earlier predate the filesystem
+# tree: they persist room_states captured when /usr, /var and /boot carried no
+# locks, so restoring one would hand the player an unsealed boss room and a
+# world whose paths no longer match its content. Rather than silently produce a
+# broken run, we refuse them and say why.
+MIN_SUPPORTED_VERSION = 3
+
+# Autosaves fire on each story beat (a lore file read), plus every manual save.
+# Without a cap the pool grows unbounded and every save/list operation slows
+# with directory size (observed: 16k files).
 MAX_SAVE_FILES = 20
 
 
-def _migrate_save(save_data):
-    """Normalize any save envelope to the current version.
+class IncompatibleSaveError(Exception):
+    """Raised when a save predates a world change that cannot be migrated."""
 
-    v1 (legacy, no "version" field) used snake_case envelope keys
-    ("timestamp", "save_date"). v2 adds "version" and camelCase envelope fields
-    ("savedAt", "saveDate") per the project's serialized-data naming convention.
-    The nested player/world payloads are intentionally left as-is (they mix
-    field names with item/flag *ids* used as map keys — see docs/REWRITE_PLAN.md).
+
+def save_version(save_data) -> int:
+    """Envelope version of a loaded save. Pre-versioning saves count as v1."""
+    if not isinstance(save_data, dict):
+        return 0
+    try:
+        return int(save_data.get("version", 1))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _migrate_save(save_data):
+    """Normalize a save envelope to the current version, or refuse it.
+
+    v1 (no "version" field) used snake_case envelope keys; v2 added "version"
+    and camelCase fields ("savedAt", "saveDate").
+
+    v3 is where migration stops being possible. A save persists room_states —
+    including which rooms are locked — and v2 saves were written when /usr, /var
+    and /boot had no locks at all. Restoring one would reopen the boss room and
+    hand back a world whose room paths no longer describe the tree the game now
+    navigates. There is no honest way to reconstruct the intended run from that,
+    so v2 and older are refused with a message rather than half-migrated into
+    something subtly broken.
     """
     if not isinstance(save_data, dict):
         return save_data
 
-    version = save_data.get("version", 1)
-
-    if version < 2:
-        # v1 -> v2: rename envelope keys to camelCase, keep payloads.
-        save_data = dict(save_data)
-        if "savedAt" not in save_data:
-            save_data["savedAt"] = save_data.pop("timestamp", None)
-        if "saveDate" not in save_data:
-            save_data["saveDate"] = save_data.pop("save_date", "Unknown date")
-        save_data["version"] = 2
-        version = 2
-
+    version = save_version(save_data)
+    if version < MIN_SUPPORTED_VERSION:
+        raise IncompatibleSaveError(
+            f"save format v{version} is from before the filesystem rework and "
+            f"cannot be loaded (current format is v{SAVE_VERSION})"
+        )
     return save_data
 
 class SaveManager:
@@ -72,7 +91,7 @@ class SaveManager:
         # Create the full file path
         save_path = os.path.join(self.save_dir, save_name)
         
-        # Create save data structure (v2 envelope, camelCase fields).
+        # Create save data structure (versioned envelope, camelCase fields).
         save_data = {
             "version": SAVE_VERSION,
             "player": player.to_dict(),
@@ -136,7 +155,10 @@ class SaveManager:
             save_data = _migrate_save(save_data)
             logger.info(f"Game loaded successfully from {filename}")
             return save_data
-            
+
+        except IncompatibleSaveError as e:
+            logger.warning(f"Refusing incompatible save {filename}: {e}")
+            raise
         except FileNotFoundError:
             logger.warning(f"Save file not found: {filename}")
             return None
@@ -155,7 +177,8 @@ class SaveManager:
             list: List of dictionaries with save file info (filename, date, player name)
         """
         save_files = []
-        
+        skipped = 0
+
         for filename in os.listdir(self.save_dir):
             if filename.endswith('.json'):
                 file_path = os.path.join(self.save_dir, filename)
@@ -163,6 +186,8 @@ class SaveManager:
                     with open(file_path, 'r') as file:
                         save_data = json.load(file)
 
+                    # Saves the current build cannot load are not offered at all,
+                    # so the load menu never presents a choice that then fails.
                     save_data = _migrate_save(save_data)
                     save_info = {
                         "filename": filename,
@@ -173,10 +198,18 @@ class SaveManager:
                     }
                     
                     save_files.append(save_info)
-                except (json.JSONDecodeError, KeyError):
+                except IncompatibleSaveError:
+                    skipped += 1
+                    continue
+                except (json.JSONDecodeError, KeyError, OSError):
                     # Skip corrupt save files
                     continue
-        
+
+        if skipped:
+            logger.info(
+                f"Ignored {skipped} save(s) from an older, incompatible format"
+            )
+
         # Sort by date (newest first)
         save_files.sort(key=lambda x: x["date"], reverse=True)
         return save_files

@@ -30,7 +30,17 @@ echo ""
 echo -e "${YELLOW}→${NC} Checking Python installation..."
 if ! command -v python3 &> /dev/null; then
     echo -e "${RED}✗${NC} Python 3 is not installed!"
-    echo -e "${YELLOW}Please install Python 3.7 or higher from https://www.python.org/${NC}"
+    echo -e "${YELLOW}Please install Python 3.10 or newer from https://www.python.org/${NC}"
+    exit 1
+fi
+
+# The game needs 3.10+ (it uses `X | None` annotations at class scope). Without
+# this check a 3.8/3.9 user got a bare TypeError traceback on import instead of
+# being told what was wrong. start.bat has always checked; this matches it.
+if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"; then
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    echo -e "${RED}✗${NC} Python ${PYTHON_VERSION} is too old — the game needs 3.10 or newer."
+    echo -e "${YELLOW}Install the latest from https://www.python.org/downloads/${NC}"
     exit 1
 fi
 
