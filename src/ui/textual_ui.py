@@ -145,6 +145,10 @@ class TextualGameUI(App):
             self._stats_panel.border_title = "📊 Stats"
 
             self.ui_state = UIState.READY
+            # Widget mutation is only safe from the thread Textual runs on.
+            # Game logic runs off it (the game-over animation, the intro
+            # typewriter), so the UIProtocol methods below marshal back here.
+            self._ui_thread_id = threading.get_ident()
             self._settings_manager.register_themes(self)
             self._settings_manager.apply_theme(self._settings_manager.settings["theme"])
             self._settings_manager.set_text_speed(self._settings_manager.settings["text_speed"])
@@ -801,6 +805,25 @@ class TextualGameUI(App):
         if self.ui_state != UIState.READY:
             raise UIStateError("UI is not ready for updates")
 
+    def _on_ui_thread(self) -> bool:
+        return threading.get_ident() == getattr(self, "_ui_thread_id", None)
+
+    def _ui_call(self, fn, *args) -> None:
+        """Run a widget mutation on Textual's thread, wherever we are now.
+
+        call_from_thread raises if you are already on the UI thread, so the
+        check is not optional. The fallback covers the app not running yet
+        (tests, teardown), where a direct call is correct.
+        """
+        if self._on_ui_thread():
+            fn(*args)
+            return
+        try:
+            self.call_from_thread(fn, *args)
+        except Exception as e:
+            logger.debug(f"call_from_thread failed, calling directly: {e}")
+            fn(*args)
+
     def _add_to_history(self, content: str) -> None:
         self.message_history.append(content)
         if len(self.message_history) > self.max_messages:
@@ -862,12 +885,12 @@ class TextualGameUI(App):
     def update_inventory(self, content: str) -> None:
         """Update the inventory panel."""
         self._check_ready()
-        self._inv_panel.update(content)
+        self._ui_call(self._inv_panel.update, content)
 
     def update_stats(self, content: str) -> None:
         """Update the stats panel."""
         self._check_ready()
-        self._stats_panel.update(content)
+        self._ui_call(self._stats_panel.update, content)
 
     def update_exits(self, exits: list) -> None:
         """Update the scene's exits display (border subtitle)."""
@@ -875,12 +898,12 @@ class TextualGameUI(App):
         if self._room_view:
             room = dict(self._room_view)
             room['exits'] = exits
-            self._scene_view.show_explore(room)
+            self._ui_call(self._scene_view.show_explore, room)
 
     def update_player_name(self, name: str) -> None:
         """Update the player name display."""
         self._check_ready()
-        self.header_content = f"Haunted Terminal - {name}"
+        self._ui_call(setattr, self, "header_content", f"Haunted Terminal - {name}")
 
     def clear_console(self) -> None:
         """Clear the output display."""
@@ -936,20 +959,23 @@ Brave sysadmin {player_name}, your session has been terminated.
         input_field.placeholder = "combat@system:~$ Enter command..."
 
     def _hide_combat_ui(self):
-        """Deactivate combat UI mode."""
+        """Deactivate combat UI mode.
+
+        Synchronous. This used to defer everything behind a 0.1s timer because
+        the engine emitted ROOM_ENTERED *after* its panel refresh, so the fresh
+        room view had not arrived by the time this ran and the scene restored
+        stale. The engine now emits ROOM_ENTERED first, so there is nothing to
+        wait for — and a timer is a race, not a fix.
+        """
         self.remove_class("combat-active")
-        self._scene_view.end_battle()
-
-        # Delayed refresh ensures panels update after combat cleanup completes
-        def delayed_panel_refresh():
-            self._inv_panel.update_inventory(self._inventory_view)
-            self._stats_panel.update_stats(self._player_view)
-            # Not on death: the game-over flow owns the scene (play_death).
-            if self._room_view and not state_manager.is_in_game_over():
-                self._scene_view.show_explore(self._room_view)
-
-        self.set_timer(0.1, delayed_panel_refresh)
         self.query_one("#input-field").placeholder = "Enter command..."
+        self._inv_panel.update_inventory(self._inventory_view)
+        self._stats_panel.update_stats(self._player_view)
+
+        # On death the game-over flow owns the scene (play_death); dropping out
+        # of battle mode here would flash the room behind it.
+        if not state_manager.is_in_game_over():
+            self._scene_view.end_battle()
 
     def _update_combat_panels(self):
         """Update all combat-related panels."""

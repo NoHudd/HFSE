@@ -293,18 +293,18 @@ class ImprovedGameEngine:
         # Use StateManager to exit combat
         state_manager.exit_combat()
 
-        # Update UI panels after combat
-        self._update_ui_panels()
-
         # On flee, CommandHandler relocates player + emits ROOM_ENTERED itself.
         # Emitting here would fire check_for_enemies on the room they just fled,
         # restarting combat before the flee handler can mark the enemy fled.
         if event.data.get("fled", False):
+            self._update_ui_panels()
             return
 
-        # Emit ROOM_ENTERED to refresh exits panel and restore full UI state
+        # ROOM_ENTERED goes out BEFORE the panel refresh. The UI leaves combat
+        # mode on this same event, and it needs the fresh room view to be in
+        # hand by then — when the order was reversed it was not, which is why
+        # the UI used to defer its panel restore behind a 0.1s timer.
         if self.world and self.player:
-            # Build room view for current room
             room_view = ViewBuilder.build_room_view(self.world, self.player.current_room)
 
             event_bus.emit_event(
@@ -315,6 +315,8 @@ class ImprovedGameEngine:
                 },
                 "ImprovedGameEngine"
             )
+
+        self._update_ui_panels()
     
     def _on_game_over(self, event):
         """Handle game over event and restart game based on player choice."""
@@ -816,15 +818,16 @@ to this haunted filesystem.[/italic]
                     response.startswith("no"))
 
         if skipping:
-            # Skip tutorial: mark complete and show quick summary
+            # The summary text lives in data/tutorial_hints.yaml as
+            # "skip_summary". It used to be inlined here as a second copy, and
+            # the two drifted: this one still told players to press TAB to
+            # *enter* Selection Mode, which combat has entered automatically
+            # since the auto-entry change (TAB now leaves it).
+            #
+            # Shown before the tutorial is marked complete, because
+            # show_tutorial_hint returns early once it is.
+            self.cmd_handler.show_tutorial_hint("skip_summary")
             self.player.tutorial_state["completed"] = True
-            self.ui.update_output(
-                "\n[bold green]ECHO:[/bold green] Got it. Quick reference: "
-                "[bold]ls[/bold] scans a room, [bold]take/equip[/bold] grab and ready items, "
-                "[bold]attack[/bold] fights enemies. In combat, press [bold]TAB[/bold] to enter "
-                "Selection Mode then [bold]1-9[/bold] to attack. "
-                "[bold]flee[/bold] escapes a fight. [bold]help[/bold] if stuck. Good luck.\n"
-            )
             self.start_game()
         else:
             # Tutorial path: show Step 1 hint, then start game

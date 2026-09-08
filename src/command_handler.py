@@ -284,105 +284,47 @@ class CommandHandler:
                 keys.append(item_id)
         return keys
 
+    # Fallback if a class ever lacks a starter_weapon in classes.yaml.
+    _FALLBACK_WEAPON = "segfault_shield"
+
     def show_tutorial_hint(self, hint_type, item_name=None):
-        """Show gated tutorial hints. Each step has a single clear instruction."""
+        """Show a gated tutorial hint. Text lives in data/tutorial_hints.yaml.
+
+        The weapon name is whatever the player is actually looking at when a
+        hint names one: the item the caller passed, else the class's authored
+        starter weapon. It used to be a hardcoded class->id map here, which
+        silently drifted from classes.yaml.
+        """
         if self.player.tutorial_state.get("completed", False):
             return
 
-        player_name = self.player.name if hasattr(self.player, 'name') and self.player.name else "spirit"
+        from src.data_loader import load_class_data, load_tutorial_hints
 
-        # Determine starter weapon name for dynamic hints
-        if item_name:
-            weapon_name = item_name
-        else:
-            class_starter_weapons = {
-                "guardian": "segfault_shield",
-                "weaver": "null_pointer",
-                "shaman": "daemon_whisper"
-            }
-            weapon_name = class_starter_weapons.get(self.player.player_class, "segfault_shield")
+        template = load_tutorial_hints().get(hint_type)
+        if template is None:
+            debug_log(f"No tutorial hint text for '{hint_type}'")
+            return
 
-        hints = {
-            # Step 0: skip summary (player chose to skip)
-            "skip_summary": (
-                "[bold green]ECHO>[/bold green] Got it. Quick reference: "
-                "[bold]ls[/bold] scans a room, [bold]take/equip[/bold] grab and ready items. "
-                "Combat opens in Selection Mode automatically — press [bold]1-9[/bold] to "
-                "attack, [bold]0[/bold] to flee. Press [bold]TAB[/bold] to type "
-                "[bold]use [item][/bold] instead. [bold]help[/bold] if stuck. Good luck."
-            ),
-            # Step 1: welcome + ls instruction
-            "step1": (
-                "[bold green]ECHO>[/bold green] You're in /home — a stable part of the filesystem. "
-                "The rest is corrupted and needs clearing. Let's start simple. "
-                "Type: [bold]ls[/bold] and press Enter to see what's here."
-            ),
-            # Step 2: take weapon instruction
-            "step2": (
-                f"[bold green]ECHO>[/bold green] Good — that's everything in this directory. "
-                f"See that weapon? Type: [bold]take {weapon_name}[/bold] to pick it up. "
-                f"Items you carry appear in the Inventory panel on the right."
-            ),
-            # Step 3: equip instruction
-            "step3": (
-                f"[bold green]ECHO>[/bold green] You're carrying it, but it's not active yet. "
-                f"Type: [bold]equip {weapon_name}[/bold] to ready it. "
-                f"Equipping means it'll be used in combat."
-            ),
-            # Step 4: combat - typed attack instruction
-            # Step 4: combat - Selection Mode is already active
-            "step4": (
-                "[bold green]ECHO>[/bold green] A corrupted process just spawned — this is "
-                "combat, and you're already in Selection Mode. Press [bold]1[/bold] to "
-                "attack."
-            ),
-            # Step 5: fires after the player's first landed attack
-            "step5": (
-                "[bold green]ECHO>[/bold green] Nice hit. One more should finish it. "
-                "Need to use an item or flee instead? Press [bold]TAB[/bold] to type "
-                "[bold]use [item][/bold] or [bold]flee[/bold] — TAB again to get back "
-                "to Selection Mode."
-            ),
-            # Step 5 post-combat informational (no gate)
-            "step5_postcombat": (
-                "[bold green]ECHO>[/bold green] You won. [bold]use [item][/bold] uses "
-                "something mid-fight, [bold]flee[/bold] or [bold]0[/bold] lets you "
-                "escape a losing fight. When you're ready, [bold]ls[/bold] to see "
-                "where you can go."
-            ),
-            # Step 6: navigation ls instruction
-            "step6": (
-                "[bold green]ECHO>[/bold green] Let's move. "
-                "Type: [bold]ls[/bold] again — 'Where you can go' lists the exits."
-            ),
-            # Step 6b: navigation move instruction
-            "step6b": (
-                "[bold green]ECHO>[/bold green] See those paths? "
-                "Type [bold]cd[/bold] and one — like [bold]cd /var[/bold] — and you'll move there. "
-                "That's how the whole filesystem works."
-            ),
-            # Step 7: tutorial complete cheat-sheet
-            "completed": (
-                f"[bold green]ECHO> Tutorial complete, {player_name}.[/bold green]\n"
-                f"Quick reminder:\n"
-                f"  • [bold]ls[/bold] — scan a room\n"
-                f"  • [bold]cd /path[/bold] — move (e.g. cd /var)\n"
-                f"  • [bold]cat[/bold] — read a file\n"
-                f"  • [bold]take / equip[/bold] — grab and ready items\n"
-                f"  • [bold]1-9[/bold] in combat — attack (Selection Mode, opens automatically)\n"
-                f"  • [bold]0[/bold] in combat — flee\n"
-                f"  • [bold]TAB[/bold] in combat — type 'use [item]' instead\n"
-                f"  • [bold]help[/bold] — if you get stuck\n"
-                f"Good luck out there."
-            ),
-        }
+        weapon_name = item_name
+        if not weapon_name:
+            klass = load_class_data().get(self.player.player_class)
+            weapon_name = getattr(klass, "starter_weapon", None) or self._FALLBACK_WEAPON
 
-        if hint_type in hints:
-            self.output.write(hints[hint_type])
+        player_name = getattr(self.player, "name", "") or "spirit"
 
-            if hint_type == "completed":
-                self.player.tutorial_state["completed"] = True
-    
+        try:
+            text = template.format(player_name=player_name, weapon_name=weapon_name)
+        except (KeyError, IndexError) as e:
+            # An unknown placeholder is a content bug; show the raw line rather
+            # than dropping the tutorial step entirely.
+            debug_log(f"Tutorial hint '{hint_type}' has a bad placeholder: {e}")
+            text = template
+
+        self.output.write(text)
+
+        if hint_type == "completed":
+            self.player.tutorial_state["completed"] = True
+
     def create_health_bar(self, current_health, max_health, color="white"):
         """Create an ASCII health bar with the specified color."""
         if max_health <= 0:
