@@ -32,7 +32,6 @@ items: []
 npcs: []
 enemies:
   - shadow_process
-# Mirrors player stats - created dynamically
 locked: false
 hidden: true
 discovery_requirement: sudo_quest_active
@@ -40,15 +39,6 @@ zone: quantum
 zone_level: 8
 story_location: true
 boss_room: true
-trial_room: true
-sudo_trial: true
-special_mechanics:
-  - mirror_boss_stats
-  - grants_sudo_on_victory
-victory_rewards:
-  - sudo_privileges_badge
-story_flags_on_victory:
-  - sudo_trial_complete
 
 # Navigation: canonical path + everything a player may type to get here.
 path: "/proc/self"

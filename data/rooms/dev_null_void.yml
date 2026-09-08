@@ -33,11 +33,6 @@ key_required: sudo_privileges_badge
 hidden: false
 zone: void
 zone_level: 5
-environmental_effect:
-  type: void_pull
-  damage_per_turn: 1
-  immunity_item: null_void_cloak
-  description: "The void's gravitational pull drains 1 HP per turn. De-allocation is inevitable without protection."
 story_location: true
 story_beats:
   - awakening_site 

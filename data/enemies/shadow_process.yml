@@ -8,8 +8,6 @@ health: 100
 damage: 10
 is_boss: true
 auto_attack: true
-mirrors_player: true
-sudo_trial_boss: true
 dialogue:
   combat_start:
     - "You think you deserve root access? You can't even defeat yourself."
@@ -33,10 +31,4 @@ drops:
 on_defeat:
   message: The Shadow Process dissolves into data fragments as the mirror shatters. The Sudo Privileges Badge materializes before you.
   story_flag: sudo_trial_complete
-special_mechanics:
-  mirrors_player_stats: true
-  dynamic_health: true
-  dynamic_damage: true
-  cannot_flee: true
-  respawns_on_trial_retry: true
 experience: 100

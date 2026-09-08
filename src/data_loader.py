@@ -191,3 +191,27 @@ def load_consumable_data(consumable_id):
 
     debug_log(f"Consumable {consumable_id} not found")
     return None
+
+
+# Tutorial hints cache
+_tutorial_hints_cache = None
+
+
+def load_tutorial_hints():
+    """Tutorial hint text (step id -> template) from data/tutorial_hints.yaml.
+
+    Templates may contain {player_name} and {weapon_name}; the caller formats
+    them. Returns {} if the file is missing or malformed — a broken tutorial
+    should not stop the game from starting.
+    """
+    global _tutorial_hints_cache
+    if _tutorial_hints_cache is not None:
+        return _tutorial_hints_cache
+
+    data = load_yaml("data/tutorial_hints.yaml")
+    if not isinstance(data, dict):
+        debug_log("ERROR: tutorial_hints.yaml is not a mapping")
+        data = {}
+    _tutorial_hints_cache = {str(k): str(v) for k, v in data.items()}
+    debug_log(f"Loaded {len(_tutorial_hints_cache)} tutorial hints")
+    return _tutorial_hints_cache
