@@ -13,6 +13,7 @@ from src import rng
 from typing import TYPE_CHECKING
 
 from src.commands.base import Command
+from src.commands.hints import inventory_names, show_not_found
 from src.events import EventType, event_bus
 from src.viewmodels.view_builder import ViewBuilder
 from utils.debug_tools import debug_log
@@ -45,8 +46,12 @@ class TakeCommand(Command):
         actual_item_id = ctx._resolve_item_shortcut(item_id, "room")
         if not actual_item_id:
             debug_log(f"Item {item_id} not found in room after shortcut resolution")
-            ctx._show_error(
-                f"[bold red]Cannot find {item_id} in this directory.[/bold red]"
+            show_not_found(
+                ctx,
+                f"[bold red]Cannot find {item_id} in this directory.[/bold red]",
+                item_id,
+                ctx.world.get_items_in_room(current_room),
+                label="Items here",
             )
             return
 
@@ -57,8 +62,12 @@ class TakeCommand(Command):
 
         if actual_item_id not in items_in_room:
             debug_log(f"Item {actual_item_id} not found in room {current_room}")
-            ctx._show_error(
-                f"[bold red]Cannot find {item_id} in this directory.[/bold red]"
+            show_not_found(
+                ctx,
+                f"[bold red]Cannot find {item_id} in this directory.[/bold red]",
+                item_id,
+                ctx.world.get_items_in_room(current_room),
+                label="Items here",
             )
             return
 
@@ -164,9 +173,14 @@ class CatCommand(Command):
             else:
                 ctx._show_error(f"[bold red]Error: Could not read {filename}[/bold red]")
         else:
-            ctx._show_error(
+            show_not_found(
+                ctx,
                 f"[bold red]Cannot find {filename} in this directory or your "
-                "inventory.[/bold red]"
+                "inventory.[/bold red]",
+                filename,
+                [*ctx.world.get_items_in_room(ctx.player.current_room),
+                 *inventory_names(ctx.player)],
+                label="Files here",
             )
 
     @staticmethod
@@ -193,8 +207,12 @@ class DropCommand(Command):
             return
 
         if not ctx.player.has_item(item_id):
-            ctx._show_error(
-                f"[bold red]You don't have {item_id} in your inventory.[/bold red]"
+            show_not_found(
+                ctx,
+                f"[bold red]You don't have {item_id} in your inventory.[/bold red]",
+                item_id,
+                inventory_names(ctx.player),
+                label="Inventory",
             )
             return
 
@@ -238,9 +256,13 @@ class ExamineCommand(Command):
             if item_id in items_in_room:
                 item = ctx.world.get_item(item_id)
             else:
-                ctx._show_error(
+                show_not_found(
+                    ctx,
                     f"[bold red]Cannot find {item_id} in this directory or your "
-                    "inventory.[/bold red]"
+                    "inventory.[/bold red]",
+                    item_id,
+                    [*items_in_room, *inventory_names(ctx.player)],
+                    label="Here",
                 )
                 return
 
@@ -318,8 +340,12 @@ class TalkCommand(Command):
         npcs_in_room = ctx.world.get_npcs_in_room(current_room)
 
         if npc_id not in npcs_in_room:
-            ctx._show_error(
-                f"[bold red]Cannot find {npc_id} in this directory.[/bold red]"
+            show_not_found(
+                ctx,
+                f"[bold red]Cannot find {npc_id} in this directory.[/bold red]",
+                npc_id,
+                npcs_in_room,
+                label="Here",
             )
             return
 
@@ -391,8 +417,12 @@ class EquipCommand(Command):
 
         if not ctx.player.has_item(weapon_id):
             debug_log(f"Player doesn't have weapon {original_input} in inventory")
-            ctx.output.write(
-                f"[bold red]You don't have {original_input} in your inventory.[/bold red]"
+            show_not_found(
+                ctx,
+                f"[bold red]You don't have {original_input} in your inventory.[/bold red]",
+                original_input,
+                inventory_names(ctx.player),
+                label="Inventory",
             )
             return
 

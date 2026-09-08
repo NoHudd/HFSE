@@ -20,6 +20,7 @@ from rich.text import Text
 import config.dev_config as dev_cfg
 from src import room_paths
 from src.commands.base import Command
+from src.commands.hints import show_not_found
 from src.events import EventType, event_bus
 from src.viewmodels.view_builder import ViewBuilder
 from utils.debug_tools import debug_log
@@ -72,6 +73,18 @@ def _permission_bits(ctx: "CommandHandler", room_id: str) -> str:
     return "dr--------"
 
 
+def _exit_names(ctx: "CommandHandler", room_id: str) -> list[str]:
+    """Names a player could type to leave this room: path basenames and room ids."""
+    names: list[str] = []
+    for exit_id in ctx.world.get_exits(room_id):
+        # Hidden rooms stay hidden: a typo must not reveal what `ls -a` guards.
+        if not ctx.world.is_discovered(exit_id):
+            continue
+        names.append(room_paths.basename(room_paths.room_path(exit_id)))
+        names.append(exit_id)
+    return names
+
+
 class CdCommand(Command):
     name = "cd"
 
@@ -84,8 +97,12 @@ class CdCommand(Command):
 
         target = room_paths.resolve(typed, current_path, ctx.room_aliases)
         if target is None:
-            ctx._show_error(
-                f"[bold red]cd: {typed}: No such file or directory[/bold red]"
+            show_not_found(
+                ctx,
+                f"[bold red]cd: {typed}: No such file or directory[/bold red]",
+                typed,
+                _exit_names(ctx, current_room),
+                label="Exits",
             )
             return
 
