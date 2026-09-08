@@ -566,6 +566,11 @@ class TextualGameUI(App):
             # Defer to active modal screen (e.g., Settings) — its own ESC binding handles dismiss.
             if len(self.screen_stack) > 1:
                 return
+            # Esc mid-line cancels the line, like a shell. Only an Esc on an
+            # empty prompt means "quit" — a typo must never close the game.
+            if self._cancel_pending_input():
+                event.stop()
+                return
             # Emit quit command to use existing confirmation flow
             event_bus.emit_event(
                 EventType.COMMAND_ENTERED,
@@ -592,6 +597,14 @@ class TextualGameUI(App):
                 elif event.key in ("enter", "return"):
                     self._select_menu_option()
                     event.stop()
+
+    def _cancel_pending_input(self) -> bool:
+        """Clear a half-typed command. True if there was one to clear."""
+        field = self.query_one("#input-field", Input)
+        if not field.value:
+            return False
+        field.value = ""
+        return True
 
     def on_input_blurred(self, event: Input.Blurred) -> None:
         """Handle when the input field loses focus (TAB pressed)."""
