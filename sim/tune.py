@@ -6,7 +6,7 @@ AVERAGE win rate across the (now-comparable) classes lands in the target band.
 
 Output is a *proposal*: a report + data/difficulty.proposed.yaml. A human
 reviews and, if happy, copies it over data/difficulty.yaml. The tuner never
-edits the live config (see docs/DIFFICULTY_SIM_DESIGN.md).
+edits the live config.
 
     python -m sim.tune --mode all --runs 60
 """
@@ -31,8 +31,14 @@ BANDS = {
 
 # Fixed per-mode presets that give each mode its own texture; the tuner moves
 # only enemy_damage to hit the band.
+#
+# These MUST track data/difficulty.yaml. The XP values were left at 1.30/1.00/
+# 0.85 after the live config was raised to 2.4/2.0/1.8 (enemies began awarding
+# their real `experience` instead of a flat 50, which halved levelling income),
+# so any tuner run would have silently reverted that fix while appearing to only
+# adjust enemy damage.
 HP_PRESET = {"easy": 0.85, "medium": 0.95, "hard": 1.15}
-XP_PRESET = {"easy": 1.30, "medium": 1.00, "hard": 0.85}
+XP_PRESET = {"easy": 2.40, "medium": 2.00, "hard": 1.80}
 
 DMG_LO, DMG_HI = 0.40, 2.00  # enemy-damage multiplier search bounds
 MAX_STEPS = 8

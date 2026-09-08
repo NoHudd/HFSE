@@ -61,34 +61,32 @@ def test_fled_enemy_room_is_not_cleared_until_respawn_and_redefeat():
         s.close()
 
 
-def test_ls_marks_cleared_exit_in_where_you_can_go():
-    """home_grove -> var_dungeon is a static exit relationship (data/rooms/
-    home_grove.yml), and var_dungeon always declares enemy_tier: 2 (data/
-    rooms/var_dungeon.yml) regardless of which specific tier-2 enemies the
-    RNG rolls there — both facts are deterministic, so this test doesn't
-    depend on run-to-run enemy placement."""
+def test_ls_marks_cleared_child_directory():
+    """var_dungeon sits at /var, a child of /, and always declares
+    enemy_tier: 2 (data/rooms/var_dungeon.yml) regardless of which specific
+    tier-2 enemies the RNG rolls there — both facts are deterministic, so this
+    test doesn't depend on run-to-run enemy placement."""
     s = GameSession()
     try:
         s.new_game("t", "guardian")
-        s.player.current_room = "home_grove"
         for enemy_id in list(s.world.enemy_locations):
             if s.world.enemy_locations[enemy_id] == "var_dungeon":
                 s.world.remove_enemy_from_room(enemy_id)
         assert s.world.is_room_cleared("var_dungeon") is True
 
-        out = "\n".join(s.submit("ls"))
-        assert "cd /var ✓" in out
+        # The cleared marker rides the directory listing, so list the parent.
+        s.player.current_room = "root"
+        out = "\n".join(str(line) for line in s.submit("ls"))
+        assert "var/" in out
+        assert "✓" in out
     finally:
         s.close()
 
 
-def test_map_marks_cleared_visited_room():
-    """var_dungeon (not var_dungeon's enemies specifically) is picked
-    deterministically, same reasoning as test_ls_marks_cleared_exit_in_where_
-    you_can_go: it always declares enemy_tier: 2 and is never hidden, so the
-    map line has no other status indicator that could sit between the room
-    id and the cleared marker (a hidden room's own '❓' would, and did, when
-    this test first used a randomly-selected room)."""
+def test_tree_marks_cleared_room():
+    """var_dungeon always declares enemy_tier: 2 (data/rooms/var_dungeon.yml)
+    and is never hidden, so it always appears in the tree and always has
+    enemies to clear, whichever tier-2 enemies the RNG rolls there."""
     s = GameSession()
     try:
         s.new_game("t", "guardian")
@@ -98,7 +96,7 @@ def test_map_marks_cleared_visited_room():
                 s.world.remove_enemy_from_room(enemy_id)
         assert s.world.is_room_cleared("var_dungeon") is True
 
-        out = "\n".join(s.submit("map"))
-        assert "var_dungeon ✓" in out
+        out = "\n".join(str(line) for line in s.submit("tree"))
+        assert "var/" in out and "✓" in out
     finally:
         s.close()

@@ -7,5 +7,12 @@ dialogues:
   - "Time slices fragment... Context switches fail... The system's heartbeat grows irregular."
   - "In the beginning, all processes ran in harmony. One parent, many children, perfect balance."
   - "The /proc filesystem holds secrets the Overlord fears. That is why it corrupts this space so heavily."
+  - "There is a directory here that is not a directory. /proc/self. It points at whoever reads it - at you. Look for it with the hidden files, if you dare. What waits there wears your face."
+  - "Superuser rights are not granted. They are proven. The trial is in /proc/self, and the examiner is yourself."
+# Talking to the Scheduler is what makes /proc/self findable: mirror_sector
+# declares discovery_requirement: sudo_quest_active, so `ls -a` will not reveal
+# it until the player has been told the trial exists. The Shadow cannot be fled,
+# so nobody should be able to wander into it by accident.
 on_talk:
   message: The Process Scheduler speaks in staccato bursts, like system calls echoing through kernel space.
+  story_flag: sudo_quest_active

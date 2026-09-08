@@ -54,10 +54,6 @@ interaction_hints:
   - "The Code Librarian guides players to lore fragments and story items."
   - "Provides hints about where to find important files like .bash_profile and system_err.log."
 
-special_mechanics:
-  lore_guide: true
-  provides_hints: true
-  non_hostile: true
 dialogue_rules:
   - {bank: farewell,        when: {game_won: true}}
   - {bank: about_panic,     when: {story_flag: typo_discovered}}

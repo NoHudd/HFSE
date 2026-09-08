@@ -36,6 +36,6 @@ zone_level: 6
 story_location: true
 gate_guardian: true
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/etc"
-aliases: ["/etc", "/etc/configs", "etc", "configs"]
+aliases: ["/etc", "/etc/iptables", "/etc/configs", "etc", "configs"]

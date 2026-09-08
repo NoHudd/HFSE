@@ -13,17 +13,16 @@ Author: NoHudd
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Header, Footer, Static, Input, RichLog
+from textual.widgets import Footer, Static, Input
 from textual.containers import Container, VerticalScroll, Horizontal, Vertical
 from textual.reactive import var
-from textual.screen import ModalScreen
 from rich.text import Text
 
-from src.ui.ui_interface import UIProtocol, UIError, UIInitializationError, UIStateError
+from src.ui.ui_interface import UIInitializationError, UIStateError
 from src.events import event_bus, EventType
 from src.game_states import GameState, UIState
 from src.state_manager import state_manager
-from utils.typewriter import TypewriterPresets, create_typewriter_output_func, request_skip as request_typewriter_skip
+from utils.typewriter import TypewriterPresets, request_skip as request_typewriter_skip
 from config.dev_config import SKIP_INTRO
 
 from src.ui.panels.inventory_panel import InventoryPanel
@@ -31,6 +30,7 @@ from src.ui.panels.stats_panel import StatsPanel
 from src.ui.panels.scene_view import SceneView
 from src.ui.screens.combat_hint import CombatModeHintScreen
 from src.ui.screens.log_viewer import LogViewerScreen
+from src.ui.screens.quit_confirm import QuitConfirmScreen
 from src.ui.screens.selection_screen import SelectionCard, SelectionScreen
 from src.ui.screens.settings_screen import SettingsScreen
 from src.ui.command_suggester import CommandSuggester
@@ -39,8 +39,7 @@ from config.settings_manager import SettingsManager
 import logging
 import os
 import threading
-import time
-from typing import Dict, Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +50,11 @@ class TextualGameUI(App):
     CSS_PATH = os.path.join(os.path.dirname(__file__), "ui.css")
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
+        # Ctrl+Q and Ctrl+C both route through the same confirmation the `quit`
+        # command uses. Textual binds ctrl+q to an immediate exit by default,
+        # which silently discarded unsaved progress.
+        Binding("ctrl+q", "request_quit", "Quit", key_display="ctrl + q", priority=True),
+        Binding("ctrl+c", "request_quit", "Quit", show=False, priority=True),
         Binding("ctrl+p", "open_settings", "Settings", key_display="ctrl + p"),
         Binding("l", "toggle_log_viewer", "Show/Hide Logs", key_display="L"),
         Binding("f5", "restart_game", "Restart Game", key_display="F5"),
@@ -105,6 +109,8 @@ class TextualGameUI(App):
         (EventType.COMBAT_ENDED, "_on_combat_ended"),
         (EventType.ENEMY_DEFEATED, "_on_enemy_defeated"),
         (EventType.GAME_WON, "_on_game_won"),
+        (EventType.GAME_QUIT, "_on_game_quit"),
+        (EventType.QUIT_CONFIRM_REQUESTED, "_on_quit_confirm_requested"),
     ]
 
     def _setup_event_subscriptions(self):
@@ -139,6 +145,10 @@ class TextualGameUI(App):
             self._stats_panel.border_title = "📊 Stats"
 
             self.ui_state = UIState.READY
+            # Widget mutation is only safe from the thread Textual runs on.
+            # Game logic runs off it (the game-over animation, the intro
+            # typewriter), so the UIProtocol methods below marshal back here.
+            self._ui_thread_id = threading.get_ident()
             self._settings_manager.register_themes(self)
             self._settings_manager.apply_theme(self._settings_manager.settings["theme"])
             self._settings_manager.set_text_speed(self._settings_manager.settings["text_speed"])
@@ -277,10 +287,6 @@ class TextualGameUI(App):
         """Handle room entered event with enhanced theming."""
         if 'room' in event.data:
             self._room_view = event.data['room']
-            exits = self._room_view.get('exits', [])
-            enemies = self._room_view.get('enemies', [])
-            npcs = self._room_view.get('npcs', [])
-
             room_name = self._room_view.get('name', '')
             self._scene_view.show_explore(self._room_view)
 
@@ -605,6 +611,32 @@ class TextualGameUI(App):
     # DEV TOOLS ACTIONS
     # =====================================
 
+    def action_request_quit(self) -> None:
+        """Ask the domain to quit, so the usual save prompt runs first."""
+        event_bus.emit_event(
+            EventType.COMMAND_ENTERED,
+            {"command": "quit", "game_state": state_manager.current_state},
+            "TextualGameUI",
+        )
+
+    def _on_quit_confirm_requested(self, event) -> None:
+        """Show the quit chooser instead of making the player type a letter."""
+        def answer(choice: str) -> None:
+            event_bus.emit_event(
+                EventType.COMMAND_ENTERED,
+                {"command": choice, "game_state": state_manager.current_state},
+                "QuitConfirmScreen",
+            )
+
+        # Deferred so the Enter/ESC that asked to quit cannot fall through onto
+        # the new screen's own bindings and answer it instantly.
+        self.call_after_refresh(self.push_screen, QuitConfirmScreen(answer))
+
+    def _on_game_quit(self, event) -> None:
+        """The domain confirmed the quit: stop the app so Textual restores the
+        terminal on the way out."""
+        self.exit()
+
     def action_open_settings(self) -> None:
         """Open the settings modal."""
         self.push_screen(SettingsScreen(self._settings_manager))
@@ -773,6 +805,25 @@ class TextualGameUI(App):
         if self.ui_state != UIState.READY:
             raise UIStateError("UI is not ready for updates")
 
+    def _on_ui_thread(self) -> bool:
+        return threading.get_ident() == getattr(self, "_ui_thread_id", None)
+
+    def _ui_call(self, fn, *args) -> None:
+        """Run a widget mutation on Textual's thread, wherever we are now.
+
+        call_from_thread raises if you are already on the UI thread, so the
+        check is not optional. The fallback covers the app not running yet
+        (tests, teardown), where a direct call is correct.
+        """
+        if self._on_ui_thread():
+            fn(*args)
+            return
+        try:
+            self.call_from_thread(fn, *args)
+        except Exception as e:
+            logger.debug(f"call_from_thread failed, calling directly: {e}")
+            fn(*args)
+
     def _add_to_history(self, content: str) -> None:
         self.message_history.append(content)
         if len(self.message_history) > self.max_messages:
@@ -834,12 +885,12 @@ class TextualGameUI(App):
     def update_inventory(self, content: str) -> None:
         """Update the inventory panel."""
         self._check_ready()
-        self._inv_panel.update(content)
+        self._ui_call(self._inv_panel.update, content)
 
     def update_stats(self, content: str) -> None:
         """Update the stats panel."""
         self._check_ready()
-        self._stats_panel.update(content)
+        self._ui_call(self._stats_panel.update, content)
 
     def update_exits(self, exits: list) -> None:
         """Update the scene's exits display (border subtitle)."""
@@ -847,12 +898,12 @@ class TextualGameUI(App):
         if self._room_view:
             room = dict(self._room_view)
             room['exits'] = exits
-            self._scene_view.show_explore(room)
+            self._ui_call(self._scene_view.show_explore, room)
 
     def update_player_name(self, name: str) -> None:
         """Update the player name display."""
         self._check_ready()
-        self.header_content = f"Haunted Terminal - {name}"
+        self._ui_call(setattr, self, "header_content", f"Haunted Terminal - {name}")
 
     def clear_console(self) -> None:
         """Clear the output display."""
@@ -908,20 +959,23 @@ Brave sysadmin {player_name}, your session has been terminated.
         input_field.placeholder = "combat@system:~$ Enter command..."
 
     def _hide_combat_ui(self):
-        """Deactivate combat UI mode."""
+        """Deactivate combat UI mode.
+
+        Synchronous. This used to defer everything behind a 0.1s timer because
+        the engine emitted ROOM_ENTERED *after* its panel refresh, so the fresh
+        room view had not arrived by the time this ran and the scene restored
+        stale. The engine now emits ROOM_ENTERED first, so there is nothing to
+        wait for — and a timer is a race, not a fix.
+        """
         self.remove_class("combat-active")
-        self._scene_view.end_battle()
-
-        # Delayed refresh ensures panels update after combat cleanup completes
-        def delayed_panel_refresh():
-            self._inv_panel.update_inventory(self._inventory_view)
-            self._stats_panel.update_stats(self._player_view)
-            # Not on death: the game-over flow owns the scene (play_death).
-            if self._room_view and not state_manager.is_in_game_over():
-                self._scene_view.show_explore(self._room_view)
-
-        self.set_timer(0.1, delayed_panel_refresh)
         self.query_one("#input-field").placeholder = "Enter command..."
+        self._inv_panel.update_inventory(self._inventory_view)
+        self._stats_panel.update_stats(self._player_view)
+
+        # On death the game-over flow owns the scene (play_death); dropping out
+        # of battle mode here would flash the room behind it.
+        if not state_manager.is_in_game_over():
+            self._scene_view.end_battle()
 
     def _update_combat_panels(self):
         """Update all combat-related panels."""

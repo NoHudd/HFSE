@@ -138,6 +138,25 @@ def load_room_data():
         return {}
 
 
+def load_npc_data():
+    """Load all NPCs as plain dicts (id -> dict, dots kept in the id).
+
+    NPCs stay dicts rather than typed models: consumers read them with ``.get``
+    (dialogue banks, dialogue_rules, on_talk effects) and the dialogue payloads
+    are free-form. The engine loader still validates them on the way through, so
+    a malformed NPC file fails loudly here rather than mid-conversation.
+    """
+    try:
+        from engine.content.loader import load_npcs
+        return {
+            str(nid): npc.model_dump(exclude_unset=True)
+            for nid, npc in load_npcs("data").items()
+        }
+    except Exception as e:
+        debug_log(f"ERROR loading npc data: {e}")
+        return {}
+
+
 # Consumables cache
 _consumables_data_cache = None
 
@@ -172,3 +191,27 @@ def load_consumable_data(consumable_id):
 
     debug_log(f"Consumable {consumable_id} not found")
     return None
+
+
+# Tutorial hints cache
+_tutorial_hints_cache = None
+
+
+def load_tutorial_hints():
+    """Tutorial hint text (step id -> template) from data/tutorial_hints.yaml.
+
+    Templates may contain {player_name} and {weapon_name}; the caller formats
+    them. Returns {} if the file is missing or malformed — a broken tutorial
+    should not stop the game from starting.
+    """
+    global _tutorial_hints_cache
+    if _tutorial_hints_cache is not None:
+        return _tutorial_hints_cache
+
+    data = load_yaml("data/tutorial_hints.yaml")
+    if not isinstance(data, dict):
+        debug_log("ERROR: tutorial_hints.yaml is not a mapping")
+        data = {}
+    _tutorial_hints_cache = {str(k): str(v) for k, v in data.items()}
+    debug_log(f"Loaded {len(_tutorial_hints_cache)} tutorial hints")
+    return _tutorial_hints_cache

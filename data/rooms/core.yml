@@ -33,7 +33,8 @@ items: []
 npcs: []
 enemies:
   - daemon_overlord.sys
-locked: false
+locked: true
+key_required: master_key
 hidden: false
 zone: core
 zone_level: 10
@@ -41,6 +42,6 @@ boss_room: true
 final_confrontation: true
 story_location: true
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
-path: "/core"
-aliases: ["/core", "core"]
+# Navigation: canonical path + everything a player may type to get here.
+path: "/boot"
+aliases: ["/boot", "/boot/kernel", "/core", "core", "kernel"]

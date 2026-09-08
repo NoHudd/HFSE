@@ -1,8 +1,8 @@
-"""Save versioning + migration tests (rewrite Phase 4a).
+"""Save versioning and compatibility.
 
-Covers: round-trip save/load, the v2 camelCase envelope, migration of a legacy
-v1 (no-version, snake-case) save, and from_dict tolerance of partial saves (the
-old bracket access raised KeyError).
+Covers: round-trip save/load, the versioned camelCase envelope, refusal of saves
+written before the filesystem tree (they persist room_states from when the boss
+room had no lock), and from_dict tolerance of partial saves.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 
 from engine.api import GameSession
 from src.player import Player
-from src.save import SAVE_VERSION, SaveManager
+from src.save import SAVE_VERSION, IncompatibleSaveError, SaveManager
 
 
 @pytest.fixture
@@ -41,34 +41,46 @@ def test_save_round_trip(session: GameSession, tmp_path) -> None:
     assert restored.max_health == session.player.max_health
 
 
-def test_v2_envelope_is_camelcase(session: GameSession, tmp_path) -> None:
+def test_envelope_is_versioned_and_camelcase(session: GameSession, tmp_path) -> None:
     mgr = SaveManager(save_dir=str(tmp_path))
     mgr.save_game(session.player, session.world.get_state(), "s.json")
     raw = json.loads((tmp_path / "s.json").read_text())
-    assert raw["version"] == 2
+    assert raw["version"] == SAVE_VERSION
     assert "savedAt" in raw and "saveDate" in raw
     assert "timestamp" not in raw and "save_date" not in raw
 
 
-def test_legacy_v1_save_migrates(tmp_path) -> None:
-    # A pre-versioning save: no "version", snake-case envelope keys.
-    legacy = {
+def _legacy_save(version: int | None) -> dict:
+    """A save from before the filesystem tree. v1 had no version field."""
+    save = {
         "player": {"name": "Old", "player_class": "guardian", "current_room": "root"},
-        "world": {},
-        "timestamp": 123.0,
-        "save_date": "2020-01-01 00:00:00",
+        "world": {"room_states": {"core": {"locked": False, "hidden": False}}},
     }
-    (tmp_path / "old.json").write_text(json.dumps(legacy))
+    if version is None:
+        save.update(timestamp=123.0, save_date="2020-01-01 00:00:00")
+    else:
+        save.update(version=version, savedAt=123.0, saveDate="2020-01-01 00:00:00")
+    return save
 
+
+@pytest.mark.parametrize("version", [None, 1, 2])
+def test_pre_tree_saves_are_refused(version, tmp_path) -> None:
+    """v2 and older persist room_states from before /boot was locked. Loading one
+    would reopen the boss room, so it is refused rather than half-migrated."""
+    (tmp_path / "old.json").write_text(json.dumps(_legacy_save(version)))
     mgr = SaveManager(save_dir=str(tmp_path))
-    loaded = mgr.load_game("old.json")
 
-    assert loaded["version"] == SAVE_VERSION
-    assert loaded["saveDate"] == "2020-01-01 00:00:00"
-    assert loaded["savedAt"] == 123.0
-    assert "save_date" not in loaded and "timestamp" not in loaded
-    # And the migrated payload still builds a player.
-    assert Player.from_dict(loaded["player"]).name == "Old"
+    with pytest.raises(IncompatibleSaveError):
+        mgr.load_game("old.json")
+
+
+def test_incompatible_saves_are_not_offered(tmp_path) -> None:
+    """The load menu must not list a save that would then fail to load."""
+    (tmp_path / "old.json").write_text(json.dumps(_legacy_save(2)))
+    mgr = SaveManager(save_dir=str(tmp_path))
+
+    assert mgr.get_save_files() == []
+    assert mgr.load_most_recent_save() is None
 
 
 def test_from_dict_tolerates_partial_save() -> None:

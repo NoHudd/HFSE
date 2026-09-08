@@ -1,7 +1,7 @@
 name: The Great ASCII Bovine
 description: A sacred entity composed entirely of ASCII art. The cosmic cow speaks in moo-ing wisdom.
 detailed_description: |
-  /usr/share/games/cowsay/.secret/.moo - The Great ASCII Bovine
+  /usr/games/cowsay/.moo - The Great ASCII Bovine
 
    _________________________________________
   /                                         \
@@ -72,11 +72,6 @@ interaction_hints:
   - "Grants the Milk of Motherboard item on first encounter."
   - "Provides humorous lore and bovine wisdom."
 
-special_mechanics:
-  easter_egg: true
-  one_time_gift: milk_of_motherboard
-  spawned_by_trigger: cat_moo_file
-  humorous_tone: true
 
 dialogue_rules:
   - {bank: already_claimed, when: {story_flag: milk_claimed}}

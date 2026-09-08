@@ -2,8 +2,9 @@
 NPC dialogue-bank resolution (pure; headless-testable).
 
 An NPC's `dialogue_rules` is an ORDERED list evaluated against a snapshot of game
-state; the first rule whose `when` fully matches supplies the lines. See
-docs/NPC_DIALOGUE_SPEC.md for the condition vocabulary.
+state; the first rule whose `when` fully matches supplies the lines. The
+condition vocabulary is `_when_matches` below, validated by
+engine.content.linker.find_dialogue_problems.
 """
 from __future__ import annotations
 

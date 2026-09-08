@@ -49,11 +49,6 @@ interaction_hints:
   - "The Firewall Knight blocks access to the Core until you present the chmod_key."
   - "This is a gate guardian - not hostile, but absolute in enforcing access rules."
 
-special_mechanics:
-  gate_guardian: true
-  key_check: chmod_key
-  grants_access_to: core
-  cannot_be_bypassed: true
 
 dialogue_rules:
   - {bank: farewell,    when: {game_won: true}}

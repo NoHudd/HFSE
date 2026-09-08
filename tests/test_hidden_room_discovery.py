@@ -43,7 +43,7 @@ def test_ls_a_discovery_refreshes_room_view():
 
         assert h.world.get_room_state("cowsay_secret")["hidden"] is False
         assert room_updates, "discovering a hidden room must emit a room-view refresh"
-        assert "/cowsay" in room_updates[-1].get("exits", []), room_updates[-1]
+        assert "/usr/games/cowsay" in room_updates[-1].get("exits", []), room_updates[-1]
         # The player must NOT have moved — this is a refresh, not a navigation event.
         assert h.player.current_room == "usr_share_games"
     finally:

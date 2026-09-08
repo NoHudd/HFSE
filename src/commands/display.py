@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only display commands: journal, inventory, map, keys.
+"""Read-only display commands: journal, inventory, keys.
+
+The old `map` verb now lives in shell.py as `tree`, which renders the same
+information as a real directory hierarchy (and still answers to "map").
 
 Bodies moved verbatim from CommandHandler (self -> ctx); they reuse handler
 helpers (get_formatted_item_description, _get_room_status_indicator,
@@ -89,71 +92,6 @@ class InventoryCommand(Command):
         ctx.output.write(
             f"[bold cyan]── Inventory ──[/bold cyan]\n{inventory_content.rstrip()}"
         )
-
-
-class MapCommand(Command):
-    name = "map"
-
-    def execute(self, ctx: "CommandHandler", args: list[str]) -> None:
-        visited_rooms = [
-            room_id
-            for room_id, state in ctx.world.room_states.items()
-            if state.get("visited", False)
-        ]
-
-        discovered_rooms = []
-        for visited_room in visited_rooms:
-            exits = ctx.world.get_exits(visited_room)
-            for exit_room in exits:
-                room_state = ctx.world.get_room_state(exit_room)
-                if (
-                    exit_room not in visited_rooms
-                    and room_state
-                    and not room_state.get("hidden", False)
-                ):
-                    discovered_rooms.append(exit_room)
-
-        discovered_rooms = list(set(discovered_rooms))
-
-        if not visited_rooms and not discovered_rooms:
-            ctx.output.write(
-                "[italic]Your map is empty. Explore to discover locations.[/italic]"
-            )
-            return
-
-        output = Text()
-        output.append("🗺  SYSTEM MAP\n", style="bold cyan")
-        output.append("=" * 50 + "\n", style="dim")
-
-        if visited_rooms:
-            output.append("\n✅ EXPLORED AREAS:\n", style="bold green")
-            for room_id in sorted(visited_rooms):
-                status_indicator = ctx._get_room_status_indicator(room_id)
-                if room_id == ctx.player.current_room:
-                    output.append(
-                        f"  ➤ {room_id} {status_indicator} "
-                        "[bold cyan](YOU ARE HERE)[/bold cyan]\n"
-                    )
-                else:
-                    output.append(f"  • {room_id} {status_indicator}\n", style="green")
-
-        unvisited_discovered = [r for r in discovered_rooms if r not in visited_rooms]
-        if unvisited_discovered:
-            output.append("\n🔍 DISCOVERED AREAS:\n", style="bold yellow")
-            for room_id in sorted(unvisited_discovered):
-                status_indicator = ctx._get_room_status_indicator(room_id)
-                output.append(f"  • {room_id} {status_indicator}\n", style="yellow")
-
-        keys = ctx._get_player_keys()
-        if keys:
-            output.append("\n🔑 YOUR KEYS:\n", style="bold blue")
-            for key_id in keys:
-                output.append(f"  • {key_id}\n", style="blue")
-
-        output.append(
-            "\n[dim]💡 Use 'ls -a', 'find', and 'ps' to discover hidden areas![/dim]"
-        )
-        ctx.output.write(output)
 
 
 class KeysCommand(Command):

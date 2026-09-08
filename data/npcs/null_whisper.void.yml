@@ -52,10 +52,6 @@ interaction_hints:
   - "The Null Whisper is the awakening guide who provides lore about the player's origin."
   - "Speaks in fragmented, ethereal whispers using ellipses."
 
-special_mechanics:
-  awakening_npc: true
-  lore_provider: true
-  ethereal_speech: true
 dialogue_rules:
   - {bank: farewell,          when: {game_won: true}}
   - {bank: awakening_lore,    when: {first_meeting: true}}

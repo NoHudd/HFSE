@@ -55,10 +55,6 @@ interaction_hints:
   - "ECHO provides helpful hints about gameplay, lore, and navigation."
   - "Talk to ECHO whenever you're lost or need guidance."
 
-special_mechanics:
-  always_helpful: true
-  provides_hints: true
-  non_hostile: true
 
 dialogue_rules:
   - {bank: farewell, when: {game_won: true}}

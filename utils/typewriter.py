@@ -8,7 +8,6 @@ When DISABLE_ANIMATIONS is True, text appears instantly.
 
 import time
 import asyncio
-import os
 import threading
 from typing import Optional, Callable
 import config.dev_config as _dev_cfg

@@ -36,9 +36,6 @@ interaction_hints:
   - "The broken shell might know something about the chmod_key location."
   - "This NPC provides lore about the Great Kernel Panic's origins."
 
-special_mechanics:
-  dialogue_stutters: true
-  random_syntax_errors: true
 
 dialogue_rules:
   - {bank: farewell, when: {game_won: true}}

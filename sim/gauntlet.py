@@ -6,14 +6,16 @@ than the room's zone_level, because zone_level is incomplete/inconsistent in the
 content (several main rooms have none, and usr_share_games=15 outranks the final
 boss room=10). Ordering by actual threat gives a stable difficulty ramp.
 
-Excluded as optional "xtras" (see docs/DIFFICULTY_SIM_DESIGN.md):
-  - hidden rooms (secret detours),
-  - locked rooms (gated behind keys),
+Excluded as optional "xtras" from the measured main path:
+  - hidden rooms (secret detours the player may never find),
   - class-restricted rooms (the class tombs/towers — e.g. srv_warrior_tomb is
     guardian-only, opt_mage_tower is weaver-only; a run must never be scored
     against a boss its class could not reach).
-None of these gate the win condition (core + Daemon Overlord), so they are side
-content, not the gauntlet.
+
+Key-locked rooms are NOT excluded. A lock is pacing, not optional content: /etc
+has always been chmod_key-locked yet is the only route to the boss, and since
+permissions replaced the exit graph as the difficulty ramp most of the mid-game
+sits behind a key. Excluding them measured a gauntlet nobody plays.
 """
 from __future__ import annotations
 
@@ -41,12 +43,20 @@ def main_path_enemy_ids() -> list[str]:
     rooms = load_room_data()
     enemies = load_enemy_data()
 
-    # Main path only: skip secret, key-gated, or class-locked side content.
-    # rooms are typed Room models (from load_room_data).
+    # Main path: everything a run must actually fight through.
+    #
+    # Key-locked rooms COUNT. A lock is a pacing device, not optional content —
+    # /etc has always been chmod_key-locked yet is the only way to the boss, and
+    # since permissions replaced the exit graph as the difficulty ramp, most of
+    # the mid-and-late game sits behind a key. Excluding locked rooms measured a
+    # gauntlet no player ever plays and dropped the boss entirely.
+    #
+    # Still excluded: hidden rooms (secret detours the player may never find) and
+    # class-restricted rooms (a run must never be scored against a boss its class
+    # cannot reach). rooms are typed Room models (from load_room_data).
     main_path = {
         rid: room for rid, room in rooms.items()
         if not room.hidden
-        and not room.locked
         and not room.class_restriction
     }
     rolled = roll_room_enemies(main_path, enemies, rng)

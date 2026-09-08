@@ -13,6 +13,6 @@ enemies: []
 locked: false
 hidden: false
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
-path: "/deprecated"
-aliases: ["/deprecated", "deprecated"]
+# Navigation: canonical path + everything a player may type to get here.
+path: "/var/tmp"
+aliases: ["/var/tmp", "/deprecated", "deprecated"]

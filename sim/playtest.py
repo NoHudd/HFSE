@@ -3,13 +3,11 @@
     python -m sim.playtest measure --mode medium --runs 200
     python -m sim.playtest measure --mode all --class all --runs 200
 
-Reports win rate + difficulty stats per (mode, class). See
-docs/DIFFICULTY_SIM_DESIGN.md.
+Reports win rate + difficulty stats per (mode, class).
 """
 from __future__ import annotations
 
 import argparse
-import sys
 
 from sim.simulator import Measurement, measure
 

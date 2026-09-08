@@ -26,9 +26,10 @@ enemy_count: 1
 npcs:
 - librarian.bin
 - echo.usr
-locked: []
+locked: true
+key_required: lib_key
 hidden: false
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/usr"
 aliases: ["/usr", "/usr/lib", "/usr/lib/arcane", "usr", "lib", "arcane"]

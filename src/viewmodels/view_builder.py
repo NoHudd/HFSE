@@ -6,7 +6,7 @@ This is the only module that knows how to translate between backend data structu
 and frontend view models, maintaining clean separation of concerns.
 """
 
-from typing import List, Optional
+from typing import List
 import logging
 
 from src.room_paths import ROOM_ID_TO_PATH
@@ -272,8 +272,6 @@ class ViewBuilder:
         """
         try:
             player_id = getattr(player, 'player_id', None)
-            player_class = getattr(player, 'player_class', 'unknown')
-
             if not player_id:
                 logger.warning("Player has no player_id, returning empty attack list")
                 return []

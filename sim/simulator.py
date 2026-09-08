@@ -4,7 +4,7 @@ Uses the real combat primitives (`combat_system.perform_attack`,
 `player.take_damage`, difficulty-scaled enemies via `world.get_enemy`) so the
 measured difficulty reflects the actual game. Loot is modeled simply (starter
 weapon + a heal stock that restocks per fight) to isolate the combat-balance
-levers we tune; see docs/DIFFICULTY_SIM_DESIGN.md.
+levers we tune.
 """
 from __future__ import annotations
 

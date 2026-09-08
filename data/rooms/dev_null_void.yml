@@ -28,18 +28,15 @@ enemy_tier: 3
 enemy_count: 1
 npcs:
   - null_whisper.void
+locked: true
+key_required: sudo_privileges_badge
 hidden: false
 zone: void
 zone_level: 5
-environmental_effect:
-  type: void_pull
-  damage_per_turn: 1
-  immunity_item: null_void_cloak
-  description: "The void's gravitational pull drains 1 HP per turn. De-allocation is inevitable without protection."
 story_location: true
 story_beats:
   - awakening_site 
 
-# Navigation (data-driven; see docs/CONTENT_DECOUPLE_SPEC.md)
+# Navigation: canonical path + everything a player may type to get here.
 path: "/dev"
 aliases: ["/dev", "/dev/null", "dev", "null", "void"]

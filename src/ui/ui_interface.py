@@ -6,7 +6,6 @@ Defines the contract that all UI implementations must follow,
 enabling better abstraction and testability.
 """
 
-from abc import ABC, abstractmethod
 from typing import Protocol, Any, Optional
 
 class UIProtocol(Protocol):

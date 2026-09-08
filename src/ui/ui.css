@@ -61,7 +61,7 @@
 }
 
 /* =============================================================================
-   SCENE VIEW (replaces room/entity strips) — docs/SCENE_VIEW_SPEC.md
+   SCENE VIEW (replaces room/entity strips) — see src/ui/panels/scene_view.py
    ============================================================================= */
 
 #scene-view {
@@ -353,6 +353,22 @@ CombatModeHintScreen > #combat-hint-content {
     width: 70;
     height: auto;
     max-height: 20;
+    border: thick $warning;
+    background: $surface;
+    padding: 1 2;
+}
+
+/* =============================================================================
+   QUIT CONFIRMATION MODAL
+   ============================================================================= */
+
+QuitConfirmScreen {
+    align: center middle;
+}
+
+QuitConfirmScreen > #quit-confirm {
+    width: 56;
+    height: auto;
     border: thick $warning;
     background: $surface;
     padding: 1 2;

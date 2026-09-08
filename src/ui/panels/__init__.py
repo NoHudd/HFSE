@@ -1,7 +1,7 @@
 """UI panels package."""
 
 # Class -> name-tag glyph. Plain emoji (no U+FE0F variation selector, which
-# collides with adjacent text in many terminals). See docs/UX_REDESIGN.md.
+# collides with adjacent text in many terminals).
 CLASS_ICONS = {
     "guardian": "🛡",
     "weaver": "✨",

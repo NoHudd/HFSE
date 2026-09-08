@@ -51,6 +51,23 @@ class EventType(Enum):
     # Subscribed by: game_engine.py
     # Data: {}
 
+    QUIT_CONFIRM_REQUESTED = auto()
+    # Emitted by: commands/system.py (quit, when there is progress to lose)
+    # Subscribed by: textual_ui.py (shows the chooser modal)
+    # Data: {}
+    #
+    # The domain still accepts typed y/n/c, so a frontend that ignores this
+    # event (the headless driver) keeps working exactly as before.
+
+    GAME_QUIT = auto()
+    # Emitted by: command_handler.py (_perform_quit), game_engine.py (menu exit)
+    # Subscribed by: textual_ui.py (App.exit), engine/headless/ui.py (records it)
+    # Data: {}
+    #
+    # The domain asks to stop; the frontend decides how. Calling sys.exit() from
+    # inside a Textual event handler skips the driver's terminal restore, which
+    # is how a clean quit ends up leaving the shell in a mangled state.
+
     # ========================================
     # Player Events
     # ========================================
@@ -218,21 +235,13 @@ class EventBus:
                 callback_errors += 1
                 logger.error(f"Error in event callback for {event.type}: {e}")
         
-        # Record metrics if available
         total_time = time.time() - start_time
-        try:
-            # Avoid circular import by importing here
-            from utils.metrics import metrics_collector
-            metrics_collector.record_event(
-                event.type,
-                f"EventBus.emit({event.source})",
-                total_time,
-                callback_errors == 0,
-                f"{callback_errors} callback errors" if callback_errors > 0 else None
+        if total_time > 0.1:
+            logger.warning(
+                f"{event.type} took {total_time:.3f}s across {len(listeners)} listeners"
             )
-        except ImportError:
-            # Metrics not available, continue without recording
-            pass
+        if callback_errors:
+            logger.warning(f"{event.type}: {callback_errors} callback error(s)")
     
     def emit_event(self, event_type: EventType, data: Dict[str, Any] = None, source: str = "unknown") -> None:
         """Convenience method to emit an event."""
